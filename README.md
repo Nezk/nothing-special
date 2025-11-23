@@ -51,7 +51,9 @@ Variables are introduced via lambdas, $\Pi$, $\Sigma$ binders, or `let` bindings
 
 In the definition of `IExp`, one observes:
 ```haskell
+| …
 | Spine (Spine (Glob Ix) (Glob CExp))
+| …
 ```
 The `Glob` wrapper allows to distinguish between global definitions and local variables/terms. 
 
