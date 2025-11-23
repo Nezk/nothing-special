@@ -1,0 +1,5 @@
+subst : (A : U 0) -> (P : A -> U 0) -> (a b : A) -> a = b @ A -> P a -> P b
+    := \A P a b e. J A a {0} (\x _. P a -> P x) (\pa. pa) b e
+
+sub : (A : U 0) -> (a b : A) -> a = b @ A -> b = a @ A
+    := \A a b e. ?hole
