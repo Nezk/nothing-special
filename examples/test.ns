@@ -1,0 +1,64 @@
+swap : (A B C : U 0) -> (A -> B -> C) -> (B -> A -> C)
+    := \A B C g. \b a. g a b
+
+subst : (A : U 0) -> (P : A -> U 0) -> (a b : A) -> a = b @ A -> P a -> P b
+    := \A P a b e. J A a {0} (\x _. P a -> P x) (\pa. pa) b e
+
+sym : (A : U 0) -> (a b : A) -> a = b @ A -> b = a @ A
+   := \A a b e. subst A (\x. x = a @ A) a b e refl
+
+---
+
+recProd : (A B C : U 0) -> (A -> B -> C) -> (A * B) -> C
+    := \A B C g p. g p.1 p.2
+
+uppt : (A B : U 0) -> (p : A * B) -> (p.1, p.2) = p @ (A * B)
+    := \A B p. refl
+
+indProd 
+    : (A B : U 0) 
+    -> (C : A * B -> U 0) 
+    -> ((x : A) -> (y : B) -> C (x, y)) 
+    -> ((p : A * B) -> C p)
+    := \A B C g p. g p.1 p.2
+
+pairEq : 
+    (A B : U 0) 
+ -> (p q : A * B) 
+ -> p.1 = q.1 @ A 
+ -> p.2 = q.2 @ B 
+ -> p = q @ (A * B)
+    := \A B p q e e'. 
+         let hyp  : p = (q.1, p.2) @ (A * B) := subst A (\x. p = (x, p.2) @ (A * B)) p.1 q.1 e  refl in
+         let hyp' : p = (q.1, q.2) @ (A * B) := subst B (\x. p = (q.1, x) @ (A * B)) p.2 q.2 e' hyp  in
+         subst (A * B) (\x. p = x @ (A * B)) (q.1, q.2) q refl hyp'
+
+pairEqSnd : 
+    (A : U 0) 
+ -> (B : A -> U 0) 
+ -> (x : A) 
+ -> (u v : B x) 
+ -> u = v @ (B x)
+ -> (x, u) = (x, v) @ ((k : A) * B k)
+    := \A B x u v e. 
+        subst (B x) (\k. (x, u) = (x, k) @ ((k : A) * B k)) u v e refl
+
+pairEqSig : 
+    (A : U 0) 
+ -> (B : A -> U 0) 
+ -> (p q : ((x : A) * B x))
+ -> (e : p.1 = q.1 @ A) 
+ -> (subst A B p.1 q.1 e p.2) = q.2 @ (B q.1)
+ -> p = q @ ((x : A) * B x)
+    := \A B p q e e'. 
+        let hyp : ?typ := \y eq'. pairEqSnd A B p.1 p.2 y eq' in 
+        ?hole
+
+singl : (A : U 0) -> (a : A) -> U 0
+    := \A a. (x : A) * (x = a @ A)
+
+Unit : U 0  := singl Nat Z
+star : Unit := (Z, refl)
+
+--indUnit : (P : Unit -> U 0) -> P star -> (u : Unit) -> P u
+--    := \P ps u. ?h
