@@ -47,7 +47,7 @@ data Spine i e
 
 The syntax strictly forbids applying arguments to non-variables. A construction such as `(λx. body) arg` is structurally impossible. In a bidirectional typechecking, a lambda abstraction is a checkable term. The head of an application spine must be inferable, and there is no other term which can be the head of application spine besides variable referencing lambda.
 
-Variables are introduced via lambdas or `let` bindings. Since `let` expressions can appear in both checkable and inferable contexts, the syntax includes two variants: `LetC` and `LetI`. This duplication is, I admit, inelegant.
+Variables are introduced via lambdas, $\Pi$, $\Sigma$ binders, or `let` bindings. Since `let` expressions can appear in both checkable and inferable contexts, the syntax includes two variants: `LetC` and `LetI`. This duplication is, I admit, inelegant.
 
 In the definition of `IExp`, one observes:
 ```haskell
