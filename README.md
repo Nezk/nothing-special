@@ -15,7 +15,6 @@ data CExp
     | Refl 
     | Contra CExp
     | Hole   HName       
-    deriving Show
 
 data IExp
     = U Ul
@@ -31,7 +30,6 @@ data IExp
     | Ind   Ul   CExp CExp CExp CExp
     | Eql   IExp CExp CExp 
     | J     IExp CExp Ul   CExp CExp CExp CExp
-    deriving Show
 ```
 
 One particular design choice has resulted in a rather restrictive syntax for function application, implemented via a `Spine` datatype.
@@ -42,7 +40,6 @@ One particular design choice has resulted in a rather restrictive syntax for fun
 data Spine i e 
     = Head i 
     | App (Spine i e) e 
-    deriving (Show, Functor)
 ```
 
 The syntax strictly forbids applying arguments to non-variables. A construction such as `(λx. body) arg` is structurally impossible. In a bidirectional typechecking, a lambda abstraction is a checkable term. The head of an application spine must be inferable, and there is no other term which can be the head of application spine besides variable referencing lambda.
