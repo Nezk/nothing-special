@@ -94,11 +94,11 @@ convV u v = do
             let fr = fresh l
             local (\c -> c { ctxLv = l + 1 }) $ convV (f fr) (f' fr)
 
-convS :: (Eq i) => Spine i (Glob Val) -> Spine i (Glob Val) -> TC ()
+convS :: (Eq i, Show i) => Spine i (Glob Val) -> Spine i (Glob Val) -> TC ()
 convS s s' = case (s, s') of
     (Head h,  Head h')   | h == h' -> return ()
     (App f x, App f' x')           -> convS f f' >> convG x x'
-    _                              -> throwError "Spine mismatch"
+    _                              -> throwError $ "Spine mismatch: " ++ show s ++ " /= " ++ show s' -- TODO: rb/pp in error messages
 
 convG :: Glob Val -> Glob Val -> TC ()
 convG g g' = do
@@ -123,7 +123,7 @@ convN ne ne' = case (ne, ne') of
         convV q q' >> convV y y' >> convN e e'
     (NeContra n,        NeContra n')                        -> convN n n'
     (NeHole h,          NeHole h')                          -> convS h h'
-    _                                                       -> throwError "Neutral mismatch"
+    _                                                       -> throwError $ "Neutral mismatch" ++ show ne ++ " " ++ show ne' -- TODO
 
 -- Type Checking --------------------------------------------------------------
 

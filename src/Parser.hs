@@ -69,12 +69,17 @@ pEq = do
         return $ REql ty l r
 
 pSpine :: Parser Raw
-pSpine = pAtom >>= go
+pSpine = do
+    hd <- pProj
+    args <- many pProj
+    return $ foldl RApp hd args
+
+pProj :: Parser Raw
+pProj = pAtom >>= go
   where 
     go t = choice
         [reservedOp ".1" >> go (RFst t),
          reservedOp ".2" >> go (RSnd t),
-         pAtom >>= \arg -> go (RApp t arg),
          return t]
 
 pAtom :: Parser Raw

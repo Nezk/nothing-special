@@ -1,3 +1,9 @@
+swap : (A B C : U 0) -> (A -> B -> C) -> (B -> A -> C)
+    := \A B C g. \b a. g a b
+
+recProd : (A B C : U 0) -> (A -> B -> C) -> (A * B) -> C :=
+    \A B C g p. g p.1 p.2
+
 subst : (A : U 0) -> (P : A -> U 0) -> (a b : A) -> a = b @ A -> P a -> P b
     := \A P a b e. J A a {0} (\x _. P a -> P x) (\pa. pa) b e
 
