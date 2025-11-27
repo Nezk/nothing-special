@@ -1,4 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 
@@ -51,12 +50,15 @@ pTerm :: Parser Raw
 pTerm = pLet 
     <|> pLam 
     <|> try pDep
-    <|> pExpr          
+    <|> do
+        t <- pExpr
+        option t $ do
+            reservedOp "->" <|> reservedOp "→"
+            RFun t <$> pTerm
 
 pExpr :: Parser Raw
 pExpr = buildExpressionParser table pEq
-  where table = [[Infix ((reservedOp "*"  <|> reservedOp "×") >> return RTimes) AssocRight],
-                 [Infix ((reservedOp "->" <|> reservedOp "→") >> return RFun)   AssocRight]]
+  where table = [[Infix ((reservedOp "*"  <|> reservedOp "×") >> return RTimes) AssocRight]]
 
 pEq :: Parser Raw
 pEq = do
@@ -123,11 +125,10 @@ pLet = do
     x <- identifier
     reservedOp ":"
     ty <- pTerm
-    (reservedOp ":=" <|> reservedOp "≔")
+    reservedOp ":=" <|> reservedOp "≔"
     val <- pTerm
     reserved "in"
-    body <- pTerm
-    return $ RLet x ty val body
+    RLet x ty val <$> pTerm
 
 pLam :: Parser Raw
 pLam = do
@@ -141,10 +142,10 @@ pDep :: Parser Raw
 pDep = do
     tel <- many1 pTele
     choice 
-        [do (reservedOp "->" <|> reservedOp "→")
+        [do reservedOp "->" <|> reservedOp "→"
             body <- pTerm
             return $ foldr (\(x, t) b -> RPi x t b) body (concat tel),
-         do (reservedOp "*" <|> reservedOp "×")
+         do reservedOp "*" <|> reservedOp "×"
             body <- pTerm
             return $ foldr (\(x, t) b -> RSigma x t b) body (concat tel)]
 
@@ -162,7 +163,7 @@ pDef = do
     n <- identifier
     reservedOp ":"
     t <- pTerm
-    (reservedOp ":=" <|> reservedOp "≔")
+    reservedOp ":=" <|> reservedOp "≔"
     v <- pTerm
     return (n, t, v)
 
