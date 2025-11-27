@@ -21,14 +21,13 @@ app ge (Cl env body) arg = evalC ge (arg : env) body
 
 vapp :: GEnv -> Val -> Val -> Val
 vapp ge v arg = case v of
-    (VLam _ cl)         -> app ge cl arg
-    (VNeut (NeSpine s)) -> VNeut (NeSpine (App s (Locl arg)))
-    (VNeut (NeHole s))  -> VNeut (NeHole (App s (Locl arg)))
-    _                   -> internalErr "vapp: applying non-function"
+    (VLam _ cl) -> app ge cl arg
+    (VNeut s)   -> VNeut (App s (Locl arg)) 
+    _           -> internalErr "vapp: applying non-function"
 
 vfst, vsnd :: Val -> Val
-vfst = \case { VPair u _ -> u; VNeut ne -> VNeut (NeFst ne); _ -> internalErr "fst error" }
-vsnd = \case { VPair _ v -> v; VNeut ne -> VNeut (NeSnd ne); _ -> internalErr "snd error" }
+vfst = \case { VPair u _ -> u; VNeut ne -> VNeut (Head (NFst ne)); _ -> internalErr "fst error" }
+vsnd = \case { VPair _ v -> v; VNeut ne -> VNeut (Head (NSnd ne)); _ -> internalErr "snd error" }
 
 -- Eval -----------------------------------------------------------------------
 
@@ -40,9 +39,9 @@ evalC ge env = \case
     Pair u v     -> VPair    (evalC ge env u) (evalC ge env v)
     Refl         -> VRefl
     Contra e     -> case evalC ge env e of
-                        VNeut ne -> VNeut (NeContra ne)
+                        VNeut ne -> VNeut (Head (NContra ne))
                         v        -> internalErr $ "contra applied to non-neutral: " ++ show v
-    Hole n       -> VNeut (NeHole (Head n))
+    Hole n       -> VNeut (Head (NHole n))
 
 evalI :: GEnv -> Env -> IExp -> Val
 evalI ge env = \case
@@ -61,13 +60,13 @@ evalI ge env = \case
         where ind vp vz vs = \case -- todo: helpers are not both in evalI scope `where` block because of univ. level
                 VZero      -> vz   -- maybe I should move them?
                 VSucc vn   -> vapp ge (vapp ge vs vn) (ind vp vz vs vn)
-                VNeut ne   -> VNeut (NeInd l vp vz vs ne)
+                VNeut ne   -> VNeut (Head (NInd l vp vz vs ne))
                 v          -> internalErr $ "ind applied to non-Nat: " ++ show v
     J a x l p q y e -> j (evalI ge env a) (evalC ge env x) (evalC ge env p)
                          (evalC ge env q) (evalC ge env y) (evalC ge env e)
         where j va vx vp vq vy = \case
                 VRefl      -> vq 
-                VNeut ne   -> VNeut (NeJ va vx l vp vq vy ne)
+                VNeut ne   -> VNeut (Head (NJ va vx l vp vq vy ne))
                 v          -> internalErr $ "J applied to non-equality: " ++ show v
 
 evalS :: GEnv -> Env -> Spine (Glob Ix) (Glob CExp) -> Val
@@ -77,13 +76,12 @@ evalS ge env = \case
         let vf   = evalS ge env f
             vArg = fmap (evalC ge env) arg -- is ony evaluated if local
         in case vf of
-            VLam _ cl          -> let val = elimGlob (ge !:?) id vArg in app ge cl val
-            VNeut (NeSpine s') -> VNeut (NeSpine (App s' vArg)) 
-            VNeut (NeHole  s') -> VNeut (NeHole  (App s' vArg))
-            _                  -> internalErr "vapp: applying non-function"
+            VLam _ cl -> let val = elimGlob (ge !:?) id vArg in app ge cl val
+            VNeut s'  -> VNeut (App s' vArg)
+            _         -> internalErr "vapp: applying non-function"
 
 fresh :: Lv -> Val
-fresh = VNeut . NeSpine . Head
+fresh = VNeut . Head . NVar
 
 -- Readback -------------------------------------------------------------------
 
@@ -105,15 +103,13 @@ rbV ge l = \case
     VRefl         -> NRefl
     where rbCl cl = rbV ge (l + 1) (app ge cl (fresh l))
 
-rbS :: GEnv -> Lv -> Spine Lv (Glob Val) -> Spine Ix (Glob NExp)
-rbS ge l = bimap (lv2Ix l) (fmap (rbV ge l))
-
 rbN :: GEnv -> Lv -> Neutral Lv Val -> Neutral Ix NExp
-rbN ge l = \case
-    NeSpine s         -> NeSpine (rbS ge l s)
-    NeFst n           -> NeFst (rbN ge l n)
-    NeSnd n           -> NeSnd (rbN ge l n)
-    NeInd k p z s n   -> NeInd k (rbV ge l p) (rbV ge l z) (rbV ge l s) (rbN ge l n)
-    NeJ a x k p q y e -> NeJ (rbV ge l a) (rbV ge l x) k (rbV ge l p) (rbV ge l q) (rbV ge l y) (rbN ge l e)
-    NeContra n        -> NeContra (rbN ge l n)
-    NeHole s          -> NeHole (bimap id (fmap (rbV ge l)) s)
+rbN ge l = bimap rbH (fmap (rbV ge l))
+    where rbH = \case
+            NVar i            -> NVar (lv2Ix l i)
+            NHole h           -> NHole h
+            NFst n            -> NFst (rbN ge l n)
+            NSnd n            -> NSnd (rbN ge l n)
+            NInd k p z s n    -> NInd k (rbV ge l p) (rbV ge l z) (rbV ge l s) (rbN ge l n)
+            NJ a x k p q y e  -> NJ (rbV ge l a) (rbV ge l x) k (rbV ge l p) (rbV ge l q) (rbV ge l y) (rbN ge l e)
+            NContra n         -> NContra (rbN ge l n)

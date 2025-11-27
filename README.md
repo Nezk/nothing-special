@@ -54,17 +54,23 @@ In the definition of `IExp`, one observes:
 ```
 The `Glob` wrapper allows to distinguish between global definitions and local variables/terms. 
 
-Values and normalised expressions cannot contain spines headed by a global reference that has not been evaluated — globals are looked up in the environment. However, if the head is a local variable (represented as a level in values and an index in normalised forms), the arguments of spine could be still refer to global definitions without being unfloded.
+Values and normalised expressions cannot contain spines headed by a global reference that has not been evaluated — globals are looked up in the environment. However, if the head is a local variable (represented as a level in values and an index in normalised forms), the arguments of spine could be still refer to global definitions without being unfolded.
 
 ```haskell
-data Neutral i e
-    -- We shouldn't evaluate globals if the head of spine is neutral
-    = NeSpine                 (Spine i (Glob e))
-    | …
-    -- If the hole is applied (for example, when typechecking J and the motive is a hole), 
-    -- the head of the spine is the name of the hole, and the arguments are inside the spine.
-    | NeHole                  (Spine HName (Glob e)) 
+-- Head of a neutral term.
+data NHead i e
+    = NVar  i
+    | NHole HName
+    | NFst  (Neutral i e)
+    | NSnd  (Neutral i e)
+    | NInd  Ul e e  e     (Neutral i e)
+    | NJ    e  e Ul e e e (Neutral i e)
+    | NContra             (Neutral i e)
+
+type Neutral i e = Spine (NHead i e) (Glob e)
 ```
+
+Values and normalised expressions wrap these neutrals:
 
 ```haskell
 data Val

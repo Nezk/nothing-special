@@ -23,7 +23,7 @@ pp' p ctx = \case
     NSucc n      -> parens (p > 3) $ "S " ++ pp' 4 ctx n
     NEql t x y   -> parens (p > 1) $ unwords [pp' 2 ctx x, "=", pp' 2 ctx y, "@", pp' 3 ctx t]
     NRefl        -> "refl"
-    NNeut n      -> ppNe p ctx n
+    NNeut n      -> ppN p ctx n
     where withFresh x k      = let x' = fresh x in k x' (x' : ctx) --           vvvvvvvvvvvvvvv It's kind of ugly, but it's a newtype, right?
           fresh n            = if n == "_" || n `notElem` ctx then n else fresh (LName (unLName n ++ "'"))
           sub c              = toEnum (fromEnum c + 0x2050) -- Offset for subscript '₀'        
@@ -32,18 +32,19 @@ pp' p ctx = \case
               then unwords [pp' pL ctx a, op, pp' 0 ctx' b]
               else unwords ["(" ++ unLName x' ++ " : " ++ pp' 0 ctx a ++ ")", op, pp' 0 ctx' b]
 
-ppNe :: Int -> LNames -> Neutral Ix NExp -> String
-ppNe p ctx = \case
-    NeSpine s               -> ppS (unLName . (ctx !!) . unIx) ctx p s
-    NeHole s                -> ppS (('?' :) . unHName) ctx p s
-    NeFst n                 -> ppNe 4 ctx n ++ ".1"
-    NeSnd n                 -> ppNe 4 ctx n ++ ".2"
-    NeContra n              -> app "contra" [ppNe 4 ctx n]
-    NeInd (Ul k) pM z s n   -> app "ind"    [br k, atom pM, atom z, atom s, ppNe 4 ctx n]
-    NeJ a x (Ul k) pM q y e -> app "J"      [atom a, atom x, br k, atom pM, atom q, atom y, ppNe 4 ctx e]
-    where atom       = pp' 4 ctx
-          br k       = "{" ++ show k ++ "}"
-          app h args = parens (p > 3) $ unwords (h : args)
+ppN :: Int -> LNames -> Neutral Ix NExp -> String
+ppN p ctx = ppS ppH ctx p
+    where ppH = \case
+            NVar i                 -> unLName (ctx !! unIx i)
+            NHole h                -> "?" ++ unHName h
+            NFst n                 -> ppN 4 ctx n ++ ".1"
+            NSnd n                 -> ppN 4 ctx n ++ ".2"
+            NContra n              -> app "contra" [ppN 4 ctx n]
+            NInd (Ul k) pM z s n   -> app "ind"    [br k, atom pM, atom z, atom s, ppN 4 ctx n]
+            NJ a x (Ul k) pM q y e -> app "J"      [atom a, atom x, br k, atom pM, atom q, atom y, ppN 4 ctx e]
+            where atom       = pp' 4 ctx
+                  br k       = "{" ++ show k ++ "}"
+                  app h args = unwords (h : args)
 
 ppS :: (i -> String) -> LNames -> Int -> Spine i (Glob NExp) -> String
 ppS ppHead ctx p = \case

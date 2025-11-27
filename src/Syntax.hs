@@ -69,18 +69,19 @@ data IExp
     | J     IExp CExp Ul   CExp CExp CExp CExp
     deriving Show
 
-data Neutral i e
-    -- We shouldn't evaluate globals if the head of spine is neutral
-    = NeSpine                 (Spine i (Glob e))
-    | NeFst                   (Neutral i e) 
-    | NeSnd                   (Neutral i e)
-    | NeInd     Ul e e  e     (Neutral i e)
-    | NeJ       e  e Ul e e e (Neutral i e)
-    | NeContra                (Neutral i e)
-    -- If the hole is applied (for example, when typechecking J and the motive is a hole), 
-    -- the head of the spine is the name of the hole, and the arguments are inside the spine.
-    | NeHole                  (Spine HName (Glob e)) 
+-- Head of a neutral term
+data NHead i e
+    = NVar  i
+    | NHole HName
+    | NFst                (Neutral i e)
+    | NSnd                (Neutral i e)
+    | NInd  Ul e e  e     (Neutral i e)
+    | NJ    e  e Ul e e e (Neutral i e)
+    | NContra             (Neutral i e)
     deriving Show
+
+-- We shouldn't evaluate globals if the head of spine is neutral
+type Neutral i e = Spine (NHead i e) (Glob e)
 
 data Cl 
     = Cl Env CExp 

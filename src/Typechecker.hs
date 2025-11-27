@@ -94,11 +94,24 @@ convV u v = do
             let fr = fresh l
             local (\c -> c { ctxLv = l + 1 }) $ convV (f fr) (f' fr)
 
-convS :: (Eq i, Show i) => Spine i (Glob Val) -> Spine i (Glob Val) -> TC ()
-convS s s' = case (s, s') of
-    (Head h,  Head h')   | h == h' -> return ()
-    (App f x, App f' x')           -> convS f f' >> convG x x'
-    _                              -> throwError $ "Spine mismatch: " ++ show s ++ " /= " ++ show s' -- TODO: rb/pp in error messages
+convN :: Neutral Lv Val -> Neutral Lv Val -> TC ()
+convN ne ne' = case (ne, ne') of
+    (Head h,  Head h')   -> convH h h'
+    (App f x, App f' x') -> convN f f' >> convG x x'
+    _                    -> throwError $ "Spine mismatch: " ++ show ne ++ " /= " ++ show ne' -- TODO: rb/pp in error messages
+    where convH h h' = case (h, h') of
+            (NVar i,            NVar i')    | i == i' -> return ()
+            (NHole n,           NHole n')   | n == n' -> return ()
+            (NFst n,            NFst n')              -> convN n n'
+            (NSnd n,            NSnd n')              -> convN n n'
+            (NInd k p z s n,    NInd k' p' z' s' n')  | k == k' ->
+                convV p p' >> convV z z' >> 
+                convV s s' >> convN n n'
+            (NJ a x k p q y e,  NJ a' x' k' p' q' y' e') | k == k' ->
+                convV a a' >> convV x x' >> convV p p' >> 
+                convV q q' >> convV y y' >> convN e e'
+            (NContra n,         NContra n')           -> convN n n'
+            _                                         -> throwError $ "Neutral head mismatch: " ++ show h ++ " " ++ show h'
 
 convG :: Glob Val -> Glob Val -> TC ()
 convG g g' = do
@@ -109,21 +122,6 @@ convG g g' = do
         (Glob n,  Locl v)            -> convV (ge !:? n) v
         (Locl v,  Glob n)            -> convV v          (ge !:? n)
         (Locl v,  Locl v')           -> convV v          v'
-
-convN :: Neutral Lv Val -> Neutral Lv Val -> TC ()
-convN ne ne' = case (ne, ne') of
-    (NeSpine s,         NeSpine s')                         -> convS s s'
-    (NeFst n,           NeFst n')                           -> convN n n'
-    (NeSnd n,           NeSnd n')                           -> convN n n'
-    (NeInd k p z s n,   NeInd k' p' z' s' n')     | k == k' ->
-        convV p p' >> convV z z' >> 
-        convV s s' >> convN n n'
-    (NeJ a x k p q y e, NeJ a' x' k' p' q' y' e') | k == k' ->
-        convV a a' >> convV x x' >> convV p p' >> 
-        convV q q' >> convV y y' >> convN e e'
-    (NeContra n,        NeContra n')                        -> convN n n'
-    (NeHole h,          NeHole h')                          -> convS h h'
-    _                                                       -> throwError $ "Neutral mismatch" ++ show ne ++ " " ++ show ne' -- TODO
 
 -- Type Checking --------------------------------------------------------------
 
@@ -267,18 +265,24 @@ inferI expr = do
             -- Return type is p y e
             inCtx $ \ge _ -> vapp ge (vapp ge vp vy) v
 
+isHole :: Neutral i e -> Bool
+isHole = \case
+    (Head (NHole _)) -> True
+    (App s _)        -> isHole s
+    _                -> False
+
 checkC :: CExp -> Val -> TC ()
 checkC expr ty = case (expr, ty) of
     (Hole n, ty') -> reportHole n ty'
         
-    (_, VNeut (NeHole _)) -> return ()
+    (_, VNeut s) | isHole s -> return ()
 
     (Lam x body, VPi _ dom cl) -> do
         l <- asks ctxLv
         withBind x dom $ do
             bodyTy <- inCtx $ \ge _ -> app ge cl (fresh l)
             checkC body bodyTy
-            
+    
     (Inf i, _) -> inferI i >>= convV ty
     
     (LetC x e ty' b, _) -> do
@@ -294,10 +298,10 @@ checkC expr ty = case (expr, ty) of
         bTy <- inCtx $ \ge _ -> app ge cl va
         checkC b bTy
         
-    (Refl, VEql _ x y) -> convV x y
+    (Refl, VEql _ x y) -> convV x y 
 
     (Contra c, _) -> checkC c (VEql VNat VZero (VSucc VZero))
     
     _ -> do
         pTy <- ppV ty
-        throwError $ "Check mismatch: " ++ show expr ++ " vs " ++ pTy        
+        throwError $ "Check mismatch: " ++ show expr ++ " vs " ++ pTy

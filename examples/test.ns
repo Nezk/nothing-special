@@ -1,11 +1,30 @@
 swap : (A B C : U 0) -> (A -> B -> C) -> (B -> A -> C)
     := \A B C g. \b a. g a b
 
-recProd : (A B C : U 0) -> (A -> B -> C) -> (A * B) -> C :=
-    \A B C g p. g p.1 p.2
+recProd : (A B C : U 0) -> (A -> B -> C) -> (A * B) -> C
+    := \A B C g p. g p.1 p.2
+
+uppt : (A B : U 0) -> (p : A * B) -> (p.1, p.2) = p @ (A * B)
+    := \A B p. refl
+
+indProd 
+    : (A B : U 0) 
+    -> (C : A * B -> U 0) 
+    -> ((x : A) -> (y : B) -> C (x, y)) 
+    -> ((p : A * B) -> C p)
+    := \A B C g p. g p.1 p.2
+
+Void : U 0        
+    := Z = (S Z) @ Nat
+
+Not : U 0 -> U 0 
+    := \A. A -> Void
+
+notNotNot : (A : U 0) -> Not (Not (Not A)) -> Not A
+    := \A n a. n (\absrd. absrd a)
 
 subst : (A : U 0) -> (P : A -> U 0) -> (a b : A) -> a = b @ A -> P a -> P b
     := \A P a b e. J A a {0} (\x _. P a -> P x) (\pa. pa) b e
 
-sub : (A : U 0) -> (a b : A) -> a = b @ A -> b = a @ A
-    := \A a b e. ?hole
+sym : (A : U 0) -> (a b : A) -> a = b @ A -> b = a @ A
+   := \A a b e. subst A (\x. x = a @ A) a b e refl
