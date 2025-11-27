@@ -1,7 +1,6 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 
 module Syntax where
 
