@@ -61,16 +61,14 @@ Values and normalised expressions cannot contain spines headed by a global refer
 data NHead i e
     = NVar  i
     | NHole HName
-    | NFst  (Neutral i e)
-    | NSnd  (Neutral i e)
+    | NFst                (Neutral i e)
+    | NSnd                (Neutral i e)
     | NInd  Ul e e  e     (Neutral i e)
     | NJ    e  e Ul e e e (Neutral i e)
     | NContra             (Neutral i e)
 
 type Neutral i e = Spine (NHead i e) (Glob e)
 ```
-
-Values and normalised expressions wrap these neutrals:
 
 ```haskell
 data Val
