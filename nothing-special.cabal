@@ -17,7 +17,9 @@ executable ns
   main-is:             Main.hs
   
   other-modules:       Syntax
+                       Utils
                        Eval
+                       Readback
                        Pretty
                        Typechecker
                        Wellscoped

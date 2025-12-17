@@ -1,5 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds #-}
 
 module Main where
 
@@ -7,12 +10,14 @@ import Control.Monad          (foldM, void)
 import Control.Monad.Except   (ExceptT, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 
-import qualified Data.Map.Strict as M
-import           System.Environment (getArgs)
+import Data.Map.Strict (empty, insert)
+
+import System.Environment (getArgs)
 
 import Syntax
 import Eval
 import Pretty
+import Readback
 import Typechecker
 import Wellscoped
 import Parser
@@ -20,77 +25,75 @@ import Parser
 -- Monad ----------------------------------------------------------------------
 
 data State = State 
-    { env   :: GEnv,
-      tys   :: GTys,
-      names :: GNames }
+    { stREnv  :: REnv,
+      stRTys  :: RTys,
+      stNames :: [RName] }
 
-type Check = ExceptT () IO
+type Typechecker = ExceptT () IO
 
-initState :: State
-initState = State M.empty M.empty []
+emptyState :: State
+emptyState = State empty empty []
 
 -- Execution ------------------------------------------------------------------
 
 main :: IO ()
 main = getArgs >>= \case
     []    -> putStrLn "Usage: ns <file_0> <file_1> ... <file_n>"
-    files -> void $ runExceptT $ foldM processFile initState files
+    files -> void $ runExceptT $ foldM processFile emptyState files
 
 -- For debugging in REPL
 checkDefs :: String -> IO ()
-checkDefs = void . runExceptT . processBlock "GHCi" initState
+checkDefs = void . runExceptT . processBlock "GHCi" emptyState
 
-processFile :: State -> FilePath -> Check State
+processFile :: State -> FilePath -> Typechecker State
 processFile state path = do
-    liftIO $ putStrLn $ "--- Checking " ++ path ++ " ---"
-    content <- liftIO $ readFile path
+    liftIO $ putStrLn $ "--- Typecheckering " ++ path ++ " ---" -- I don't want to add the transformers library to cabal project. That's why it's liftIO.
+    content <- liftIO $ readFile path 
     processBlock path state content
 
-processBlock :: String -> State -> String -> Check State
+processBlock :: String -> State -> String -> Typechecker State
 processBlock sourceName state input = do
     defs <- liftError ("Parse Error in " ++ sourceName) (parseRDefs input)
     foldM processDef state defs
 
-processDef :: State -> (String, Raw, Raw) -> Check State
+processDef :: State -> (String, Raw, Raw) -> Typechecker State
 processDef st (rName, rTy, rV) = do
-    let name = GName rName
+    let name = RName rName
     
-    -- Scope Check
-    (ty, e) <- liftError ("Scope Error [" ++ rName ++ "]") $ runSC (names st) ((,) <$> wsI rTy <*> wsC rV)
+    (ty, e) <- liftError ("Scope Error [" ++ rName ++ "]") $ runSC (stNames st) ((,) <$> ws @Infer rTy <*> ws @Check rV)
 
-    let ctx = emptyCtx (env st) (tys st)
+    let ctx = Ctx 
+            { ctxREnv  = stREnv st,
+              ctxRTys  = stRTys st,
+              ctxEnv   = [],
+              ctxTys   = [],
+              ctxNames = [],
+              ctxLv    = 0 }
 
-    -- Check annotation
-    _ <- runCheck ctx rName "Annotation" (inferI ty)
+    _ <- runTypechecker ctx rName "Annotation" (tc ty)
 
-    -- Evaluate type
-    let vTy = evalI (env st) [] ty
+    let vTy = eval (stREnv st) [] ty
 
-    -- Check body
-    runCheck ctx rName "Body" (checkC e vTy)
+    runTypechecker ctx rName "Body" (tc e vTy)
 
-    -- Evaluate body
-    let v = evalC (env st) [] e
+    let v = eval (stREnv st) [] e
 
-    -- Readback
-    let nTy = rbV (env st) 0 vTy
-    let n   = rbV (env st) 0 v
+    --let nTy = rb (stREnv st) 0 vTy
+    let n   = rb (stREnv st) 0 v
     
-    liftIO $ putStrLn $ rName ++ " : " ++ pp [] nTy ++ " ≔ " ++ pp [] n
+    liftIO $ putStrLn $ rName ++ " : " ++ pp [] ty {-nTy-} ++ " ≔ " ++ pp [] n
     
-    -- State update
     return $ st 
-        { env   = M.insert name v    (env st)
-        , tys   = M.insert name vTy  (tys st)
-        , names = names st ++ [name] 
-        }
+        { stREnv  = insert name v    (stREnv st),
+          stRTys  = insert name vTy  (stRTys st),
+          stNames = stNames st ++ [name] }
 
-liftError :: String -> Either String a -> Check a
+liftError :: String -> Either String a -> Typechecker a
 liftError prefix = either (logError . ((prefix ++ ": ") ++)) return
     where logError = (>> throwError ()) . liftIO . putStrLn
 
-runCheck :: Ctx -> String -> String -> TC a -> Check a
-runCheck ctx name stage action = do
+runTypechecker :: Ctx -> String -> String -> TC a -> Typechecker a
+runTypechecker ctx name stage action = do
     let (res, logs) = runTC ctx action
     liftIO $ mapM_ putStrLn logs
     liftError ("Type Error (" ++ stage ++ ") [" ++ name ++ "]") res

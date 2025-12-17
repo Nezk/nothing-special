@@ -1,0 +1,3 @@
+ID : (A : U 0) -> U 0 := \A. A -> A
+
+testPi : ID Nat = Nat @ U 0 := refl

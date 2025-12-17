@@ -1,20 +1,19 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Parser 
-    ( parseRDefs
-    , runSC
-    ) where
+module Parser (parseRDefs, runSC) where
 
 import Control.Monad (void)
 
 import Data.Bifunctor (first)
 
-import           Text.Parsec
-import           Text.Parsec.Expr
-import qualified Text.Parsec.Token as T
-import           Text.Parsec.Language (emptyDef)
+import Text.Parsec
+import Text.Parsec.Expr
+import Text.Parsec.Language (emptyDef)
 
+import qualified Text.Parsec.Token as T
+
+import Syntax
 import Wellscoped
 
 -- todo: rewrite the parser
@@ -87,17 +86,17 @@ pProj = pAtom >>= go
 pAtom :: Parser Raw
 pAtom = choice
         [reserved "U"      >> RU <$> integer,
-         (reserved "Nat"   <|> reserved "ℕ") >> return RNat,
+        (reserved "Nat"   <|> reserved "ℕ") >> return RNat,
          reserved "Z"      >> return RZero,
-         reserved "S"      >> RSucc <$> pAtom,
+         reserved "S"      >> RSucc <$> pProj,
          reserved "refl"   >> return RRefl,
-         reserved "contra" >> RContra <$> pAtom,
-         reserved "ind"    >> RInd <$> braces integer <*> pAtom <*> pAtom <*> pAtom <*> pAtom,
-         reserved "J"      >> RJ <$> pAtom <*> pAtom <*> braces integer <*> pAtom <*> pAtom <*> pAtom <*> pAtom,
+         reserved "contra" >> RContra <$> pProj,
+         reserved "ind"    >> RInd <$> braces integer <*> pProj <*> pProj <*> pProj <*> pProj,
+         reserved "J"      >> RJ <$> pProj <*> pProj <*> braces integer <*> pProj <*> pProj <*> pProj <*> pProj,
          pHole,
          pVar,
          parens pPair]
-
+        
 pHole :: Parser Raw
 pHole = do
     reservedOp "?"

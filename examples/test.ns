@@ -7,7 +7,7 @@ subst : (A : U 0) -> (P : A -> U 0) -> (a b : A) -> a = b @ A -> P a -> P b
 sym : (A : U 0) -> (a b : A) -> a = b @ A -> b = a @ A
    := \A a b e. subst A (\x. x = a @ A) a b e refl
 
----
+------------------------------------------------------------
 
 recProd : (A B C : U 0) -> (A -> B -> C) -> (A * B) -> C
     := \A B C g p. g p.1 p.2
@@ -17,10 +17,10 @@ uppt : (A B : U 0) -> (p : A * B) -> (p.1, p.2) = p @ (A * B)
 
 indProd 
     : (A B : U 0) 
-    -> (C : A * B -> U 0) 
-    -> ((x : A) -> (y : B) -> C (x, y)) 
-    -> ((p : A * B) -> C p)
-    := \A B C g p. g p.1 p.2
+   -> (C : A * B -> U 0) 
+   -> ((x : A) -> (y : B) -> C (x, y)) 
+   -> ((p : A * B) -> C p)
+   := \A B C g p. g p.1 p.2
 
 pairEq : 
     (A B : U 0) 
@@ -33,32 +33,61 @@ pairEq :
          let hyp' : p = (q.1, q.2) @ (A * B) := subst B (\x. p = (q.1, x) @ (A * B)) p.2 q.2 e' hyp  in
          subst (A * B) (\x. p = x @ (A * B)) (q.1, q.2) q refl hyp'
 
-pairEqSnd : 
-    (A : U 0) 
- -> (B : A -> U 0) 
- -> (x : A) 
- -> (u v : B x) 
- -> u = v @ (B x)
- -> (x, u) = (x, v) @ ((k : A) * B k)
-    := \A B x u v e. 
-        subst (B x) (\k. (x, u) = (x, k) @ ((k : A) * B k)) u v e refl
+------------------------------------------------------------
 
-pairEqSig : 
-    (A : U 0) 
- -> (B : A -> U 0) 
- -> (p q : ((x : A) * B x))
- -> (e : p.1 = q.1 @ A) 
- -> (subst A B p.1 q.1 e p.2) = q.2 @ (B q.1)
- -> p = q @ ((x : A) * B x)
-    := \A B p q e e'. 
-        let hyp : ?typ := \y eq'. pairEqSnd A B p.1 p.2 y eq' in 
-        ?hole
+Void : U 0 := Z = S Z @ Nat
+
+contra' : (A : U 0) -> Void -> A
+	:= \A p. contra p
+
+------------------------------------------------------------
 
 singl : (A : U 0) -> (a : A) -> U 0
-    := \A a. (x : A) * (x = a @ A)
+    := \A a. (x : A) * (a = x @ A)
 
 Unit : U 0  := singl Nat Z
 star : Unit := (Z, refl)
 
---indUnit : (P : Unit -> U 0) -> P star -> (u : Unit) -> P u
---    := \P ps u. ?h
+unitEq : (u : Unit) -> u = star @ Unit
+       := \u. J Nat Z {0} (\x p. (x, p) = star @ Unit) refl u.1 u.2
+
+------------------------------------------------------------
+
+isZero : Nat -> U 0
+       := \n. ind {1} (\_. U 0) Unit (\_ _. Void) n
+
+isBool : Nat -> U 0
+       := \n. ind {1} (\_. U 0) Unit (\k _. isZero k) n
+
+Bool  : U 0  := (n : Nat) * isBool n
+true  : Bool := (Z,   star)
+false : Bool := (S Z, star)
+
+boolInd :
+    (P : Bool -> U 0)
+ -> P true
+ -> P false
+ -> (b : Bool) -> P b
+ := \P pt pf b. 
+    ind {0}
+    	-- motive
+    	(\n. (h : isBool n) -> P (n, h))
+	-- 0 => True
+    	(\h. let e  : h = star @ Unit := unitEq h in
+	     let e' : star = h @ Unit := sym Unit h star e in
+	     subst Unit (\u. P (Z, u)) star h e' pt)
+	-- k + 1
+	(\k _ h. ind {0} (\x. (hx : isZero x) -> P (S x, hx))
+	       -- hx : Unit
+	       -- pf : P(1, star)
+	       (\hx. let e  : hx = star @ Unit := unitEq hx in
+	             let e' : star = hx @ Unit := sym Unit hx star e in
+		     subst Unit (\u. P (S Z, u)) star hx e' pf)
+	       -- x = S k'
+	       -- P (S (S k'), hx)
+	       -- hx : Void
+	       (\k' _ hx. contra hx)
+	       k
+	       h)
+	b.1
+	b.2

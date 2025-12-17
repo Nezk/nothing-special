@@ -1,97 +1,101 @@
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Wellscoped where
 
-import Syntax
-
 import Control.Monad.Reader
 import Control.Applicative ((<|>))
-import Control.Monad       (guard)
+import Control.Monad (guard)
 
 import Data.List (elemIndex)
 
--- Raw syntax -----------------------------------------------------------------
+import Syntax
+import Utils
+import Pretty (ppRaw)
 
-data Raw
-    = RVar String
-    | RU Int
-    | RNat 
-    | RZero 
-    | RSucc Raw
-    | RPi String Raw Raw        
-    | RFun Raw Raw              
-    | RSigma String Raw Raw     
-    | RTimes Raw Raw            
-    | RLet String Raw Raw Raw   
-    | RLam String Raw           
-    | RPair Raw Raw             
-    | RFst Raw                  
-    | RSnd Raw                  
-    | RApp Raw Raw              
-    | REql Raw Raw Raw          
-    | RRefl
-    | RContra Raw
-    | RInd Int Raw Raw Raw Raw      
-    | RJ Raw Raw Int Raw Raw Raw Raw
-    | RHole String              
-    deriving Show
-
--- Wellscopdness checking -----------------------------------------------------
-
-data ScopeCtx = ScopeCtx 
-    { scLocals  :: [String],
-      scGlobals :: GNames }
-
+data ScopeCtx
+  = ScopeCtx { scLocals  :: [String], -- come from arguments of Raw syntax
+               scGlobals :: RNames }
+    
 type SC = ReaderT ScopeCtx (Either String)
 
-runSC :: GNames -> SC a -> Either String a
+runSC :: RNames -> SC a -> Either String a
 runSC globs m = runReaderT m (ScopeCtx { scLocals = [], scGlobals = globs })
 
-wsI :: Raw -> SC IExp
-wsI = \case
-    RU i              -> pure $ U (Ul i)
-    RNat              -> pure Nat
-    RZero             -> pure Zero
-    RPi x a b         -> Pi    (LName x) <$> wsI a <*> withVar x   (wsI b)
-    RFun a b          -> Pi    "_"       <$> wsI a <*> withVar "_" (wsI b) 
-    RSigma x a b      -> Sigma (LName x) <$> wsI a <*> withVar x   (wsI b) 
-    RTimes a b        -> Sigma "_"       <$> wsI a <*> withVar "_" (wsI b) 
-    RFst t            -> Fst <$> wsI t
-    RSnd t            -> Snd <$> wsI t
-    RInd l p z s n    -> Ind (Ul l) <$> wsC p <*> wsC z <*> wsC s <*> wsC n
-    REql t a b        -> Eql <$> wsI t <*> wsC a <*> wsC b
-    RJ a x l p q y e  -> J   <$> wsI a <*> wsC x <*> pure (Ul l) 
-                             <*> wsC p <*> wsC q <*> wsC y <*> wsC e
-    RLet x t v b      -> LetI (LName x) <$> wsC v <*> wsI t <*> withVar x (wsI b)
-    RSucc t           -> Succ <$> wsC t
-    t@(RApp _ _)      -> wsS t
-    t@(RVar _)        -> wsS t
-    RHole n           -> lift $ Left $ "Cannot infer type of hole ?" ++ n
-    t                 -> lift $ Left $ "Cannot infer type: " ++ show t
+ws :: forall m. (HasMode m, Valid Syn m) => Raw -> SC (Sy m)
+ws raw = case raw of
+    RU     i       -> pure $ U (Ul i)
+    RNat           -> pure Nat
+    RZero          -> pure Zero
+    RSucc    t     -> Succ <$> ws @Check t
+    RPi    x a b   -> Pi  (LName x) <$> ws @Infer a <*> withVar x (ws @Infer b)
+    RFun     a b   -> Pi  "_"       <$> ws @Infer a <*> withVar "_" (ws @Infer b)
+    RSigma x a b   -> Sig (LName x) <$> ws @Infer a <*> withVar x (ws @Infer b)
+    RTimes   a b   -> Sig "_"       <$> ws @Infer a <*> withVar "_" (ws @Infer b)
+    REql   t a b   -> Eql           <$> ws @Infer t <*> ws @Check a <*> ws @Check b
+    RLet   x t v b -> Let (LName x) <$> ws @Check v <*> ws @Infer t <*> withVar x (ws @m b)
+    RVar   x       -> resolve x
 
-wsC :: Raw -> SC CExp
-wsC = \case
-    RLam x b      -> Lam (LName x)  <$> withVar x (wsC b)
-    RLet x t v b  -> LetC (LName x) <$> wsC v <*> wsI t <*> withVar x (wsC b)
-    RPair a b     -> Pair   <$> wsC a <*> wsC b
-    RContra t     -> Contra <$> wsC t
-    RRefl         -> pure Refl
-    RHole n       -> pure $ Hole $ HName n
-    t             -> Inf <$> wsI t
+    RApp f a -> withS f $ \s -> do
+        arg  <- ws @Check a
+        case view s of { VLocal -> pure $ Use $ App s arg; VGlobal -> pure $ Use $ App s arg; }
+        
+    RFst t -> withS t $ \s -> 
+        pure $ Use (App (Head Fst) s)
 
-wsS :: Raw -> SC IExp
-wsS = fmap Spine . roll
-  where roll = \case
-            RApp f a -> App  <$> roll f <*> (Locl <$> wsC a)
-            RVar x   -> Head <$> resolve x
-            t        -> lift $ Left $ "Spine head must be variable, found: " ++ show t
+    RSnd t -> withS t $ \s -> 
+        pure $ Use (App (Head Snd) s)
 
-resolve :: String -> SC (Glob Ix)
-resolve n = asks lookupName >>= maybe reportError pure
-  where reportError    = lift $ Left $ "Variable not in scope: " ++ n
-        lookupName ctx = (Locl . Ix <$> elemIndex n (scLocals ctx)) <|> (Glob (GName n) <$ guard (GName n `elem` scGlobals ctx))
+    RInd l p z s n -> do
+        cn <- ws @Check n; cp <- ws @Check p; cz <- ws @Check z; cs <- ws @Check s
+        pure $ Use (App (Head (Ind (Ul l) cp cz cs)) cn)
 
-withVar :: String -> SC a -> SC a
-withVar x = local $ \ctx -> ctx { scLocals = x : scLocals ctx }
+    RJ a x l p q y e -> do
+        ca <- ws @Infer a; cx <- ws @Check x; cp <- ws @Check p
+        cq <- ws @Check q; cy <- ws @Check y; ce <- ws @Check e
+        pure $ Use (App (Head (J ca cx (Ul l) cp cq cy)) ce)
+
+    RContra t -> case mode @m of 
+        SCheck -> withS t $ \s -> pure $ Use (App (Head Contra) s)
+        _      -> wsErr
+
+    RLam x b -> case mode @m of 
+        SCheck -> Lam (LName x) <$> withVar x (ws @Check b)
+        _      -> wsErr
+
+    RPair a b -> case mode @m of 
+        SCheck -> Pair <$> ws @Check a <*> ws @Check b
+        _      -> wsErr
+
+    RRefl -> case mode @m of 
+        SCheck -> pure Refl
+        _      -> wsErr
+
+    RHole n -> case mode @m of 
+        SCheck -> pure $ Use (Head (Hole (HName n)))
+        _      -> wsErr
+    
+    where wsErr = lift . Left $ "Cannot infer expression: " ++ ppRaw raw
+    
+          withS :: Raw -> (forall l. Spine Syn Infer (Node l) Check -> SC a) -> SC a
+          withS t k = ws @Infer t >>= \case
+              Use s -> k s 
+              _     -> lift $ Left "Expected a spine (variable, reference, or application), but got a canonical term."
+
+          -- Left for locals, Right for globals
+          lookupName name ctx = (Left <$> elemIndex name (scLocals ctx)) <|> (Right (RName name) <$ guard (RName name `elem` scGlobals ctx))
+            
+          resolve :: String -> SC (Sy m)
+          resolve n = asks (lookupName n) >>= \case
+              Nothing        -> lift $ Left $ "Var not in scope: " ++ n
+              Just (Left i)  -> pure $ var (Ix i)
+              Just (Right r) -> pure $ Use (Head (Ref r))
+           
+          withVar :: String -> SC a -> SC a
+          withVar x = local \c -> c { scLocals = x : scLocals c }

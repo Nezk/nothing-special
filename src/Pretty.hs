@@ -1,53 +1,131 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Pretty (pp) where
+module Pretty where
+
+import Data.List (intercalate)
 
 import Syntax
+import Utils
 
 parens :: Bool -> String -> String
 parens b s = if b then "(" ++ s ++ ")" else s
 
-pp :: LNames -> NExp -> String
+sub :: Int -> String
+sub = map (toEnum . (+ 0x2050) . fromEnum) . show
+
+ppVar :: forall p. PPPhase p => LNames -> V p -> String
+ppVar ctx v = unLName $ ctx !! idx
+  where idx = case phase @p of { SSem -> length ctx - unLv v - 1; SSyn -> unIx v; SNrm -> unIx v }
+
+ppBind :: forall p m. PPPhase p => Int -> LNames -> Bind p m -> String
+ppBind p = case phase @p of { SSem -> ppCl; SSyn -> pp' p; SNrm -> pp' p }
+
+ppCl :: LNames -> Cl -> String
+ppCl = \case
+    []          -> \_             -> internalErr "ppCl: Empty context"
+    ctx@(x : _) -> \(Cl env body) ->
+        let envNames    = [ LName ("#" ++ show i) | i <- [0..length env - 1] ]
+            bodyCtx     = x : envNames
+            bodyPP      = pp' 0 bodyCtx body
+            dumpVal i v = "#" ++ show i ++ " = " ++ pp' 0 ctx v 
+        in bodyPP ++ " { " ++ intercalate ", " (zipWith dumpVal [(0 :: Int)..] env) ++ " }"
+
+pp :: forall p m. PPPhase p => LNames -> Exp p m -> String
 pp = pp' 0
 
-pp' :: Int -> LNames -> NExp -> String
+pp' :: forall p m. PPPhase p => Int -> LNames -> Exp p m -> String
 pp' p ctx = \case
-    NU (Ul i)    -> 'U' : map sub (show i)
-    NPi x a b    -> ppF "→" 0 1 x a b
-    NSigma x a b -> ppF "×" 2 3 x a b
-    NLam x b     -> parens (p > 0) $ withFresh x $ \x' ctx' -> "λ" ++ unLName x' ++ ". " ++ pp' 0 ctx' b
-    NPair a b    -> "(" ++ pp' 0 ctx a ++ ", " ++ pp' 0 ctx b ++ ")"
-    NNat         -> "ℕ"
-    NZero        -> "Z"
-    NSucc n      -> parens (p > 3) $ "S " ++ pp' 4 ctx n
-    NEql t x y   -> parens (p > 1) $ unwords [pp' 2 ctx x, "=", pp' 2 ctx y, "@", pp' 3 ctx t]
-    NRefl        -> "refl"
-    NNeut n      -> ppN p ctx n
-    where withFresh x k      = let x' = fresh x in k x' (x' : ctx) --           vvvvvvvvvvvvvvv It's kind of ugly, but it's a newtype, right?
-          fresh n            = if n == "_" || n `notElem` ctx then n else fresh (LName (unLName n ++ "'"))
-          sub c              = toEnum (fromEnum c + 0x2050) -- Offset for subscript '₀'        
-          ppF op pC pL x a b = parens (p > pC) $ withFresh x $ \x' ctx' ->
-              if x == "_"
-              then unwords [pp' pL ctx a, op, pp' 0 ctx' b]
-              else unwords ["(" ++ unLName x' ++ " : " ++ pp' 0 ctx a ++ ")", op, pp' 0 ctx' b]
+    U (Ul i)     -> "U" ++ sub i
+    Nat          -> "ℕ"
+    Zero         -> "Z"
+    Succ n       -> parens (p > 3) $ "S " ++ pp' 4 ctx n
+    Pi   x a b   -> ppBinder 0 1 "→" p x a b
+    Sig  x a b   -> ppBinder 2 3 "×" p x a b
+    Lam  x   b   -> parens (p > 0) $ withFresh ctx x $ \x' ctx' -> 
+                    "λ" ++ unLName x'  ++ ". " ++ ppBind @p @Check 0 ctx' b
+    Pair   a b   -> "(" ++ pp' 0 ctx a ++ ", " ++ pp' 0 ctx b ++ ")"
+    Eql  t x y   -> parens (p > 1) $ unwords [pp' 2 ctx x, "=", pp' 2 ctx y, "@", pp' 3 ctx t]
+    Refl         -> "refl"    
+    Use  s       -> ppS p ctx s
+    Let  x t v b -> parens (p > 0) $ withFresh ctx x $ \x' ctx' -> 
+                    unwords ["let", unLName x', ":", pp' 0 ctx t, ":=", pp' 0 ctx v, "in", pp' 0 ctx' b]
+    where ppBinder thP argP op prec x a b = parens (prec > thP) $ withFresh ctx x $ \x' ctx' -> unwords [ppDomain argP x x' a, op, ppBind @p @Infer 0 ctx' b]
+          ppDomain argP x x' a            = if unLName x == "_" then pp' argP ctx a else "(" ++ unLName x' ++ " : " ++ pp' 0 ctx a ++ ")"         
 
-ppN :: Int -> LNames -> Neutral Ix NExp -> String
-ppN p ctx = ppS ppH ctx p
-    where ppH = \case
-            NVar i                 -> unLName (ctx !! unIx i)
-            NHole h                -> "?" ++ unHName h
-            NFst n                 -> ppN 4 ctx n ++ ".1"
-            NSnd n                 -> ppN 4 ctx n ++ ".2"
-            NContra n              -> app "contra" [ppN 4 ctx n]
-            NInd (Ul k) pM z s n   -> app "ind"    [br k, atom pM, atom z, atom s, ppN 4 ctx n]
-            NJ a x (Ul k) pM q y e -> app "J"      [atom a, atom x, br k, atom pM, atom q, atom y, ppN 4 ctx e]
-            where atom       = pp' 4 ctx
-                  br k       = "{" ++ show k ++ "}"
-                  app h args = unwords (h : args)
+ppS :: forall p m s arg. PPPhase p => Int -> LNames -> Spine p m s arg -> String
+ppS p ctx = \case
+    App s arg -> 
+        case s of
+            Head Fst -> ppArg ++ ".1"
+            Head Snd -> ppArg ++ ".2"
+            _        -> parens (p > 3) $ unwords [ppS 3 ctx s, ppArg]
+        where ppArg = case view s of
+                         VLocal  -> pp' 4 ctx arg
+                         VGlobal -> case phase @p of
+                              SSyn -> pp' 4 ctx arg
+                              _    -> internalErr "TODO"
+                         VStrict -> case phase @p of
+                              SSyn -> ppS 4 ctx arg
+                              SSem -> ppS 4 ctx arg
+                              SNrm -> ppS 4 ctx arg
+                         VFlex   -> case phase @p of
+                              SSyn -> pp' 4 ctx arg
+                              SSem -> ppS 4 ctx arg 
+                              SNrm -> ppS 4 ctx arg 
+    Head h -> ppH ctx h
 
-ppS :: (i -> String) -> LNames -> Int -> Spine i (Glob NExp) -> String
-ppS ppHead ctx p = \case
-    Head i  -> ppHead i
-    App f a -> let arg = elimGlob unGName (pp' 4 ctx) a 
-               in parens (p > 3) $ unwords [ppS ppHead ctx 3 f, arg]
+
+ppH :: forall p m s arg. PPPhase p => LNames -> Head p m s arg -> String
+ppH ctx = \case
+    Var i              -> ppVar @p ctx i
+    Hole h             -> "?" ++ unHName h
+    Ref r              -> unRName r    
+    Contra             -> "contra"
+    Ind   (Ul k) p z s -> unwords ["ind",                           "{" ++ show k ++ "}", pp' 4 ctx p, pp' 4 ctx z, pp' 4 ctx s]
+    J a x (Ul k) p q y -> unwords ["J",   pp' 4 ctx a, pp' 4 ctx x, "{" ++ show k ++ "}", pp' 4 ctx p, pp' 4 ctx q, pp' 4 ctx y]    
+    Fst                -> "fst"
+    Snd                -> "snd"
+
+withFresh :: LNames -> LName -> (LName -> LNames -> res) -> res
+withFresh ctx x k = let x' = fresh x ctx in k x' (x' : ctx)
+
+fresh :: LName -> LNames -> LName
+fresh n ctx | n == "_" || n `notElem` ctx = n
+            | otherwise                   = fresh (LName (unLName n ++ "'")) ctx
+
+ppRaw :: Raw -> String
+ppRaw = ppRaw' 0
+
+ppRaw' :: Int -> Raw -> String
+ppRaw' p = \case
+    RVar   x            -> x
+    RU     i            -> "U" ++ sub i
+    RNat                -> "ℕ"
+    RZero               -> "Z"
+    RSucc    t          -> parens (p > 3) $ "S " ++ ppRaw' 4 t
+    RPi    "_" a b      -> ppArrow p a b
+    RPi    x   a b      -> parens (p > 0) $ unwords ["(" ++ x ++ " :", ppRaw' 0 a ++ ")", "→", ppRaw' 0 b]
+    RFun       a b      -> ppArrow p a b
+    RSigma "_" a b      -> ppTimes p a b
+    RSigma x   a b      -> parens (p > 0) $ unwords ["(" ++ x ++ " :", ppRaw' 0 a ++ ")", "×", ppRaw' 0 b]
+    RTimes     a b      -> ppTimes p a b
+    RLam   x     b      -> parens (p > 0) $ "λ" ++ x ++ ". " ++ ppRaw' 0 b
+    RLet   x t v b      -> parens (p > 0) $ unwords ["let", x, ":", ppRaw' 0 t, ":=", ppRaw' 0 v, "in", ppRaw' 0 b]
+    RApp   f   a        -> parens (p > 3) $ unwords [ppRaw' 3 f, ppRaw' 4 a]
+    RPair      a b      -> "(" ++ ppRaw' 0 a ++ ", " ++ ppRaw' 0 b ++ ")"
+    RFst     t          -> ppRaw' 4 t ++ ".1"
+    RSnd     t          -> ppRaw' 4 t ++ ".2"
+    REql     t a b      -> parens (p > 1) $ unwords [ppRaw' 2 a, "=", ppRaw' 2 b, "@", ppRaw' 3 t]
+    RRefl               -> "refl"
+    RHole    n          -> "?" ++ n
+    RContra  t          -> parens (p > 3) $ "contra " ++ ppRaw' 4 t
+    RInd     k p' z s n -> parens (p > 3) $ unwords [ "ind", "{" ++ show k ++ "}", ppRaw' 4 p', ppRaw' 4 z, ppRaw' 4 s, ppRaw' 4 n ]
+    RJ   a x k p' q y e -> parens (p > 3) $ unwords [ "J", ppRaw' 4 a, ppRaw' 4 x, "{" ++ show k ++ "}", ppRaw' 4 p', ppRaw' 4 q, ppRaw' 4 y, ppRaw' 4 e ]
+  where ppArrow prec a b = parens (prec > 0) $ ppRaw' 1 a ++ " → " ++ ppRaw' 0 b
+        ppTimes prec a b = parens (prec > 2) $ ppRaw' 3 a ++ " × " ++ ppRaw' 2 b
