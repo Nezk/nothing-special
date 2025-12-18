@@ -20,7 +20,7 @@ import Control.Monad               (join)
 
 import GHC.TypeLits (TypeError, ErrorMessage(..))
 
-import Data.Kind (Constraint)
+import Data.Kind       (Constraint)
 import Data.Map.Strict ((!))
 
 import Syntax
@@ -321,11 +321,12 @@ tcAppStrict h arg = case h of
     Snd -> inst @m $ do
         ty              <- tcS @Infer arg
         (_, Cl env cod) <- asSig ty
-        varg <- asks \c -> eval c.ctxREnv c.ctxEnv (Use arg)
+        varg <- asks \c -> evalS c.ctxREnv c.ctxEnv arg
         asks \c -> eval c.ctxREnv (doFst varg : env) cod
     Contra -> case mode @m of
         SCheck -> \_ -> do
             proofTy <- tcS @Infer arg
             case proofTy of
                 Eql _ Zero (Succ Zero) -> pure ()
-                _                       -> throwError "Contra: Argument must be a proof of equality"
+                _                      -> throwError "Contra: Argument must be a proof of equality"
+

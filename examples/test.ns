@@ -36,6 +36,17 @@ pairEq :
          let hyp' : p = (q.1, q.2) @ (A * B) := subst B (\x. p = (q.1, x) @ (A * B)) p.2 q.2 e' hyp  in
          subst (A * B) (\x. p = x @ (A * B)) (q.1, q.2) q refl hyp'
 
+ac :
+    (A B : U 0)
+ -> (R : A -> B -> U 0)
+ -> ((x : A) -> (y : B) * R x y)
+ -> ((f : A -> B) * (x : A) -> R x (f x))
+ := \A B R g.
+    (\x. (g x).1, \x. (g x).2) -- (f : A -> B) * (x : A) -> R x (f x) | f := \x. (g x).1
+                               -- (x : A) -> R x (g x).1
+			       
+         	 	       -- (y : B) * R x y | y := (g x).1
+			       -- R x (g x).1
 ------------------------------------------------------------
 
 Void : U 0 := Z = S Z @ Nat
@@ -44,6 +55,16 @@ Void : U 0 := Z = S Z @ Nat
 
 singl : (A : U 0) -> (a : A) -> U 0
     := \A a. (x : A) * (a = x @ A)
+
+Jsingl :
+     (A : U 0)
+     (a : A)
+  -> (P : singl A a -> U 0)
+  -> P (a, refl)
+  -> ((q : singl A a) -> P q)
+  := \A a P r q. J A a {0} (\x e. P (x, e)) r q.1 q.2
+
+------------------------------------------------------------
 
 Unit : U 0  := singl Nat Z
 star : Unit := (Z, refl)
