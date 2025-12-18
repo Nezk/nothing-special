@@ -327,7 +327,5 @@ tcAppStrict h arg = case h of
         SCheck -> \_ -> do
             proofTy <- tcS @Infer arg
             case proofTy of
-                Eql _ lhs rhs -> case (lhs, rhs) of
-                    (Zero, Succ _) -> pure ()
-                    _              -> throwError "Contra: Equality is not obviously impossible (0 = S n @ Nat)"
-                _ -> throwError "Contra: Argument must be a proof of equality"
+                Eql _ Zero (Succ Zero) -> pure ()
+                _                       -> throwError "Contra: Argument must be a proof of equality"

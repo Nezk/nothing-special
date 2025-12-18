@@ -4,6 +4,9 @@ swap : (A B C : U 0) -> (A -> B -> C) -> (B -> A -> C)
 subst : (A : U 0) -> (P : A -> U 0) -> (a b : A) -> a = b @ A -> P a -> P b
     := \A P a b e. J A a {0} (\x _. P a -> P x) (\pa. pa) b e
 
+subst1 : (A : U 0) -> (P : A -> U 1) -> (a b : A) -> a = b @ A -> P a -> P b
+    := \A P a b e. J A a {1} (\x _. P a -> P x) (\pa. pa) b e
+
 sym : (A : U 0) -> (a b : A) -> a = b @ A -> b = a @ A
    := \A a b e. subst A (\x. x = a @ A) a b e refl
 
@@ -36,9 +39,6 @@ pairEq :
 ------------------------------------------------------------
 
 Void : U 0 := Z = S Z @ Nat
-
-contra' : (A : U 0) -> Void -> A
-	:= \A p. contra p
 
 ------------------------------------------------------------
 
@@ -77,17 +77,57 @@ boolInd :
 	     let e' : star = h @ Unit := sym Unit h star e in
 	     subst Unit (\u. P (Z, u)) star h e' pt)
 	-- k + 1
-	(\k _ h. ind {0} (\x. (hx : isZero x) -> P (S x, hx))
-	       -- hx : Unit
-	       -- pf : P(1, star)
-	       (\hx. let e  : hx = star @ Unit := unitEq hx in
-	             let e' : star = hx @ Unit := sym Unit hx star e in
-		     subst Unit (\u. P (S Z, u)) star hx e' pf)
-	       -- x = S k'
-	       -- P (S (S k'), hx)
-	       -- hx : Void
-	       (\k' _ hx. contra hx)
-	       k
-	       h)
+	(\k _. ind {0} (\x. (hx : isZero x) -> P (S x, hx))
+		       -- hx : Unit
+	       	       -- P (S Z, star)
+	       	       (\hx. let e  : hx = star @ Unit := unitEq hx in
+		             let e' : star = hx @ Unit := sym Unit hx star e in
+			     subst Unit (\u. P (S Z, u)) star hx e' pf)
+	       	       -- hx : Void			     
+	       	       -- P (S (S k'), hx)
+	       	       (\k' _ hx. contra hx)
+	       	       k)
 	b.1
 	b.2
+
+boolInd1 :
+    (P : Bool -> U 1)
+ -> P true
+ -> P false
+ -> (b : Bool) -> P b
+ := \P pt pf b. 
+    ind {1}
+        (\n. (h : isBool n) -> P (n, h))
+        (\h. let e  : h = star @ Unit := unitEq h in
+             let e' : star = h @ Unit := sym Unit h star e in
+             subst1 Unit (\u. P (Z, u)) star h e' pt)
+    (\k _. ind {1} (\x. (hx : isZero x) -> P (S x, hx))
+               (\hx. let e  : hx = star @ Unit := unitEq hx in
+                     let e' : star = hx @ Unit := sym Unit hx star e in
+                     subst1 Unit (\u. P (S Z, u)) star hx e' pf)
+               (\k' _ hx. contra hx)
+               k)
+    b.1
+    b.2
+
+ifU : (A B : U 0) -> Bool -> U 0
+    := \A B. boolInd1 (\_. U 0) A B
+
+if : (A B : U 0) -> A -> B -> (b : Bool) -> ifU A B b
+   := \A B. boolInd (ifU A B)
+
+------------------------------------------------------------
+
+Coprod : (A B : U 0) -> U 0 := \A B. (b : Bool) * ifU A B b
+inl    : (A B : U 0) -> A -> Coprod A B := \A B a. (true,  a)
+inr    : (A B : U 0) -> B -> Coprod A B := \A B b. (false, b)
+
+coprodInd :
+     (A B : U 0)
+  -> (P : Coprod A B -> U 0)
+  -> ((a : A) -> P (inl A B a))
+  -> ((b : B) -> P (inr A B b))
+  -> ((x : Coprod A B) -> P x)
+  := \A B P l r x.
+     boolInd (\b. (v : ifU A B b) -> P (b, v)) l r x.1 x.2
+	
