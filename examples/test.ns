@@ -10,6 +10,46 @@ subst1 : (A : U 0) -> (P : A -> U 1) -> (a b : A) -> a = b @ A -> P a -> P b
 sym : (A : U 0) -> (a b : A) -> a = b @ A -> b = a @ A
    := \A a b e. subst A (\x. x = a @ A) a b e refl
 
+ap :
+      (A B : U 0)
+   -> (a b : A)
+   -> (f : A -> B)
+   -> a = b @ A
+   -> (f a) = (f b) @ B
+   := \A B a b f e.
+      subst A (\x. f a = f x @ B) a b e refl
+      
+------------------------------------------------------------
+
+recNat :
+     (C : U 0)
+  -> C
+  -> (Nat {- prev -} -> C {- res -} -> C)
+  -> (Nat -> C)
+  := \C fz fs n. ind {0} (\_. C) fz fs n
+
+recNat1 :
+     (C : U 1)
+  -> C
+  -> (Nat -> C -> C)
+  -> (Nat -> C)
+  := \C fz fs n. ind {1} (\_. C) fz fs n
+
+double : Nat -> Nat
+    := recNat Nat Z (\_ prev. S (S prev))
+
+add : Nat -> Nat -> Nat
+    := recNat (Nat -> Nat) (\n. n) (\_ addk n. S (addk n))
+
+addAssoc :
+       (i j k : Nat)
+    -> add i (add j k) = add (add i j) k @ Nat
+    := \i j k.
+       ind {0} (\x. add x (add j k) = add (add x j) k @ Nat)
+       	       refl
+	       (\i' prev. ap Nat Nat (add i' (add j k)) (add (add i' j) k) (\n. S n) prev)
+	       i
+
 ------------------------------------------------------------
 
 recProd : (A B C : U 0) -> (A -> B -> C) -> (A * B) -> C
@@ -75,10 +115,10 @@ unitEq : (u : Unit) -> u = star @ Unit
 ------------------------------------------------------------
 
 isZero : Nat -> U 0
-       := \n. ind {1} (\_. U 0) Unit (\_ _. Void) n
+       := recNat1 (U 0) Unit (\_ _. Void)
 
 isBool : Nat -> U 0
-       := \n. ind {1} (\_. U 0) Unit (\k _. isZero k) n
+       := recNat1 (U 0) Unit (\k _. isZero k) 
 
 Bool  : U 0  := (n : Nat) * isBool n
 true  : Bool := (Z,   star)
@@ -151,4 +191,4 @@ coprodInd :
   -> ((x : Coprod A B) -> P x)
   := \A B P l r x.
      boolInd (\b. (v : ifU A B b) -> P (b, v)) l r x.1 x.2
-	
+
