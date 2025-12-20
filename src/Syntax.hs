@@ -81,8 +81,8 @@ data Head (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
     Ind :: Valid p m => Ul    -> Chk p -> Chk p -> Chk p                   -> Head p m Flex Check
     J   :: Valid p m => Inf p -> Chk p -> Ul    -> Chk p -> Chk p -> Chk p -> Head p m Flex Check
 
-    Fst    :: Valid p m => Head p m Strict Infer
-    Snd    :: Valid p m => Head p m Strict Infer
+    Fst    :: Valid p m => Head p m           Strict Infer
+    Snd    :: Valid p m => Head p m           Strict Infer
     Contra ::              Head p (T p Check) Strict Infer
 
 data Spine (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where

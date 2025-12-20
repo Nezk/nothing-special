@@ -18,8 +18,23 @@ ap :
    -> (f a) = (f b) @ B
    := \A B a b f e.
       subst A (\x. f a = f x @ B) a b e refl
-      
+
+trans :
+      (A : U 0)
+   -> (a b c : A)
+   -> a = b @ A
+   -> b = c @ A
+   -> a = c @ A
+   := \A a b c e e'.
+      subst A (\x. a = x @ A) b c e' e
+
 ------------------------------------------------------------
+
+apS :
+     (n k : Nat)
+  -> n = k @ Nat
+  -> (S n) = (S k) @ Nat
+  := \n k e. ap Nat Nat n k (\x. S x) e
 
 recNat :
      (C : U 0)
@@ -41,14 +56,38 @@ double : Nat -> Nat
 add : Nat -> Nat -> Nat
     := recNat (Nat -> Nat) (\n. n) (\_ addk n. S (addk n))
 
-addAssoc :
-       (i j k : Nat)
-    -> add i (add j k) = add (add i j) k @ Nat
+addAssoc : (i j k : Nat) -> add i (add j k) = add (add i j) k @ Nat
     := \i j k.
        ind {0} (\x. add x (add j k) = add (add x j) k @ Nat)
        	       refl
-	       (\i' prev. ?h) -- ap Nat Nat (add i' (add j k)) (add (add i' j) k) (\n. S n) prev)
+	       (\i' prev. ap Nat Nat (add i' (add j k)) (add (add i' j) k) (\n. S n) prev)
 	       i
+
+addZ : (k : Nat) -> add Z k = add k Z @ Nat
+  := \k.
+     ind {0} (\x. add Z x = add x Z @ Nat)
+             refl
+	     -- k'   = add k' Z
+	     -- S k' = S (add k' Z)
+	     (\k' prev. apS k' (add k' Z) prev)
+	     k
+
+addS : (n k : Nat) -> S (add n k) = add n (S k) @ Nat
+  := \n k.
+     ind {0} (\x. S (add x k) = add x (S k) @ Nat)
+     refl
+     (\k' prev. apS (S (add k' k)) (add k' (S k)) prev)
+     n
+
+addComm : (n k : Nat) -> add n k = add k n @ Nat
+  := \n k.
+     ind {0} (\x. add x k = add k x @ Nat)
+     	     (addZ k)
+	     (\k' h.
+	       let e  : S (add k' k)  = S (add k k') @ Nat := apS  (add k' k) (add k k') h in
+	       let e' : S (add k  k') = add k (S k') @ Nat := addS k          k'           in
+	       trans Nat (S (add k' k)) (S (add k k')) (add k (S k')) e e')
+	     n
 
 ------------------------------------------------------------
 
@@ -90,6 +129,12 @@ ac :
 ------------------------------------------------------------
 
 Void : U 0 := Z = S Z @ Nat
+
+Not : U 0 -> U 0
+    := \A. A -> Void
+
+NotNotNot : (A : U 0) -> Not (Not (Not A)) -> Not A
+    := \A p a. p (\f. f a)
 
 ------------------------------------------------------------
 
