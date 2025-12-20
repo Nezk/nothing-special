@@ -11,7 +11,7 @@ import Syntax
 import Utils
 
 type family Res (s :: Status) (arg :: Mode) where
-    Res (Node l) _   = Vl
+    Res Rigid    _   = Vl
     Res Strict   arg = Spine Sem None Strict arg
     Res Flex     arg = Spine Sem None Flex   Check
 
@@ -28,26 +28,23 @@ eval renv env = \case
     Eql a x y   -> Eql       (eval renv env a)      (eval renv env x) (eval renv env y)
     Refl        -> Refl
     Let _ v _ b -> eval renv (eval renv env v : env) b
-    Use s       -> case view s of 
-        VLocal  -> evalS renv env s
-        VGlobal -> evalS renv env s
+    Use s       -> evalS renv env s
 
 evalS :: REnv -> Env -> Spine Syn m s arg -> Res s arg
 evalS renv env = \case
-    Head h     -> evalH renv env h
-    App s arg -> 
+    Head h    -> evalH renv env h
+    App  s arg -> 
         let f = evalS renv env s
         in case view s of
-            VLocal  -> app        renv f (eval  renv env arg)
-            VGlobal -> app        renv f (eval  renv env arg)
-            VStrict -> elimStrict      f (evalS renv env arg)
+            VRigid  -> app        renv f (eval  renv env arg)
+            VStrict -> elimStrict renv f (evalS renv env arg)
             VFlex   -> elimFlex   renv f (eval  renv env arg)
 
 evalH :: REnv -> Env -> Head Syn m s arg -> Res s arg
 evalH renv env = \case
     Var ix        -> env !! unIx ix
     Hole h        -> Use $ Head $ Hole h
-    Ref r         -> renv ! r
+    Ref r         -> Use $ Head $ Ref r -- lazy
     Fst           -> Head Fst
     Snd           -> Head Snd
     Contra        -> Head Contra
@@ -55,47 +52,52 @@ evalH renv env = \case
     J a x u p q y -> Head $ J     (eval renv env a) (eval renv env x) u (eval renv env p)
                                   (eval renv env q) (eval renv env y)
 
+unfold :: REnv -> Spine Sem None Rigid Check -> Maybe Vl
+unfold renv = \case
+    Head h -> case h of
+        Ref r -> Just (renv ! r)
+        _     -> Nothing
+    App s a -> case view s of
+        VRigid -> unfold renv s >>= \f -> pure (app renv f a)
+        _      -> Nothing
+
 app :: REnv -> Vl -> Vl -> Vl
 app renv f a = case f of
     Lam _ (Cl env b) -> eval renv (a : env) b
-    Use s            -> case view s of
-        VLocal  -> Use $ App s a
-        VGlobal -> internalErr "Global ref in Sem app head"
+    Use s            -> Use $ App s a 
     _                -> internalErr "app: Ill-typed application"
 
-doFst :: Vl -> Vl
-doFst = \case
+doFst :: REnv -> Vl -> Vl
+doFst renv = \case
     Pair a _ -> a
-    Use  s   -> case view s of
-        VLocal  -> Use $ App (Head Fst) s
-        VGlobal -> internalErr "Global ref in doFst"
-    _        -> internalErr "doFst: not a pair"
+    Use  s   -> case unfold renv s of
+         Just p  -> doFst renv p
+         Nothing -> Use $ App (Head Fst) s
+    _ -> internalErr "doFst: not a pair"
 
-doSnd :: Vl -> Vl
-doSnd = \case
+doSnd :: REnv -> Vl -> Vl
+doSnd renv = \case
     Pair _ b -> b
-    Use  s   -> case view s of
-        VLocal  -> Use $ App (Head Snd) s
-        VGlobal -> internalErr "Global ref in doSnd"
-    _        -> internalErr "doSnd: not a pair"
+    Use  s   -> case unfold renv s of
+         Just p  -> doSnd renv p
+         Nothing -> Use $ App (Head Snd) s
+    _ -> internalErr "doSnd: not a pair"
 
-elimStrict :: Spine Sem None Strict arg -> Vl -> Vl
-elimStrict = \case
-    Head Fst -> doFst
-    Head Snd -> doSnd
-    -- e. g. Contra
-    s        -> \case 
-      Use s' -> case view s' of
-         VLocal  -> Use $ App s s'
-         VGlobal -> internalErr "Global ref in strict elim arg"
-      _      -> internalErr "Stuck strict elim"     
+elimStrict :: REnv -> Spine Sem None Strict arg -> Vl -> Vl
+elimStrict renv sp arg = case sp of
+    Head Fst    -> doFst renv arg
+    Head Snd    -> doSnd renv arg
+    Head Contra -> 
+        case arg of
+            Use s -> Use (App sp s)
+            _     -> internalErr "Stuck strict elim"
 
 elimFlex :: REnv -> Spine Sem None Flex Check -> Vl -> Vl
 elimFlex renv sp arg = case (sp, arg) of
     (Head (Ind _ _     z _), Zero)   -> z
     (Head (Ind _ _ _     s), Succ k) -> app renv (app renv s k) (elimFlex renv sp k)
     (Head (J   _ _ _ _ q _), Refl)   -> q
-    (_,   Use spArg)                 -> case view spArg of
-        VLocal  -> Use $ App sp spArg
-        VGlobal -> internalErr "Global ref in flex elim arg"
+    (_,                      Use s)  -> case unfold renv s of
+         Just arg' -> elimFlex renv sp arg'
+         Nothing   -> Use $ App sp s
     _                                -> internalErr "Stuck flex elim"

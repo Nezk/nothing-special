@@ -26,18 +26,17 @@ instance HasMode Infer       where mode = SInfer
 instance HasMode Check       where mode = SCheck
 
 data View s arg where
-    VLocal  :: View (Node Local)  Check
-    VGlobal :: View (Node Global) Check
-    VStrict :: View Strict        arg
-    VFlex   :: View Flex          Check
+    VRigid  :: View Rigid  Check
+    VStrict :: View Strict arg
+    VFlex   :: View Flex   Check
 
 view :: Spine p m s arg -> View s arg
 view = \case
-    App _ _ -> VLocal
+    App _ _ -> VRigid
     Head h  -> case h of
-        Var  {} -> VLocal
-        Hole {} -> VLocal
-        Ref  {} -> VGlobal
+        Var  {} -> VRigid
+        Hole {} -> VRigid
+        Ref  {} -> VRigid
         Fst     -> VStrict
         Snd     -> VStrict
         Contra  -> VStrict

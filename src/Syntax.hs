@@ -23,10 +23,9 @@ newtype Ix = Ix { unIx :: Int } deriving (Show, Num, Eq)      via Int
 newtype Lv = Lv { unLv :: Int } deriving (Show, Num, Eq)      via Int 
 newtype Ul = Ul { unUl :: Int } deriving (Show, Num, Eq, Ord) via Int 
 
-data Mode     = Infer          | Check  | None
-data Phase    = Syn            | Sem    | Nrm
-data Status   = Node  Locality | Flex   | Strict
-data Locality = Local          | Global -- TODO: rename
+data Mode     = Infer | Check  | None
+data Phase    = Syn   | Sem    | Nrm
+data Status   = Rigid | Flex   | Strict
 
 type family T (p :: Phase) (m :: Mode) :: Mode where
     T Syn m = m
@@ -37,28 +36,22 @@ type family V (p :: Phase) where
     V Sem = Lv
     V Nrm = Ix
 
-type family Choice (p :: Phase) (s :: Status) (l :: Locality) (arg :: Mode) where
-    -- Node Local (Var/Hole):
-    -- In Syntax:           They accept any expression as arguments.
-    -- In Semantics/Normal: They form Neutral expressions. because a neutral variable/hole is the head,
-    --                      therefore, they accept any expression as argument
-    Choice p   (Node Local)  _ arg = Exp p   (T p arg)
-    -- Def (Global Reference):
-    -- In Syntax:    Global definitions can be heads of applications.
-    -- In Semantics: A global definition is never the head of a spine; it effectively evaluates to its body. 
-    Choice Syn (Node Global) _ arg = Exp Syn arg
-    Choice p   (Node Global) _ _   = TypeError (Text "Global in Sem Choice")
+type family Choice (p :: Phase) (s :: Status) (arg :: Mode) where
+    -- Rigid (Var/Hole/Ref):
+    -- In Syntax:    They accept expressions.
+    -- In Semantics: They form Neutral expressions.
+    Choice p   Rigid arg = Exp p (T p arg)
     -- Flex (Eliminators like Ind, J):
     -- In Syntax:    They accept expressions.
     -- In Semantics: They are stuck. They only appear in a Spine if the elimination is blocked.
     --               Thus, they accept spines.
-    Choice Syn Flex   _ arg = Exp Syn arg
-    Choice p   Flex   _ arg = Spine p None (Node Local) Check
-    -- Strict (Projections, Contra):
-    -- In Syntax:   They accept spines with nodes of status with any locality (global or local)
-    -- In Semantics They accept spines "local" nodes
-    Choice Syn Strict l arg = Spine Syn arg (Node l) Check
-    Choice p   Strict _ arg = Spine p None (Node Local) Check    
+    Choice Syn Flex   arg = Exp   Syn            arg
+    Choice p   Flex   arg = Spine p   None Rigid Check
+     -- Strict (Projections, Contra):
+     -- In Syntax:   They accept spines with nodes of status with any locality (global or local)
+     -- In Semantics They accept spines "local" nodes
+    Choice Syn Strict arg = Spine Syn arg  Rigid Check
+    Choice p   Strict arg = Spine p   None Rigid Check    
 
 -- Ensures that only valid Modes are used in specific Phases.    
 type family Bind (p :: Phase) (m :: Mode) where
@@ -76,14 +69,14 @@ type family Valid (p :: Phase) (m :: Mode) :: Constraint where
     Valid p   m     = TypeError (Text "Invalid Mode: " :<>: ShowType m :<>: Text " in phase: " :<>: ShowType p)
 
 type family TApp (p :: Phase) (s :: Status) (m :: Mode) :: Mode where
-    TApp Syn (Node _) _ = Infer
-    TApp Syn _        m = m
-    TApp _   _        _ = None
+    TApp Syn Rigid _ = Infer
+    TApp Syn _     m = m
+    TApp _   _     _ = None
 
 data Head (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
-    Var  :: Valid p m => V p   -> Head p m           (Node Local)  Check
-    Hole :: HName              -> Head p (T p Check) (Node Local)  Check
-    Ref  :: Valid p m => RName -> Head p m           (Node Global) Check 
+    Var  :: Valid p m => V p   -> Head p m           Rigid Check
+    Hole :: HName              -> Head p (T p Check) Rigid Check
+    Ref  :: Valid p m => RName -> Head p m           Rigid Check 
     
     Ind :: Valid p m => Ul    -> Chk p -> Chk p -> Chk p                   -> Head p m Flex Check
     J   :: Valid p m => Inf p -> Chk p -> Ul    -> Chk p -> Chk p -> Chk p -> Head p m Flex Check
@@ -93,21 +86,21 @@ data Head (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
     Contra ::              Head p (T p Check) Strict Infer
 
 data Spine (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
-    Head :: Valid p m => Head  p m            s arg                     -> Spine p m s            arg
-    App  :: Valid p m => Spine p (TApp p s m) s arg -> Choice p s l arg -> Spine p m (Node Local) Check
+    Head :: Valid p m => Head  p m            s arg                   -> Spine p m s     arg
+    App  :: Valid p m => Spine p (TApp p s m) s arg -> Choice p s arg -> Spine p m Rigid Check
 
 data Exp (p :: Phase) (m :: Mode) where   
-    U    :: Valid p m => Ul                              -> Exp p m
-    Nat  :: Valid p m =>                                    Exp p m
-    Zero :: Valid p m =>                                    Exp p m
-    Succ :: Valid p m => Chk p                           -> Exp p m
-    Pi   :: Valid p m => LName -> Inf p -> Bind p Infer  -> Exp p m
+    U    :: Valid p m => Ul                              -> Exp p   m
+    Nat  :: Valid p m =>                                    Exp p   m
+    Zero :: Valid p m =>                                    Exp p   m
+    Succ :: Valid p m => Chk p                           -> Exp p   m
+    Pi   :: Valid p m => LName -> Inf p -> Bind p Infer  -> Exp p   m
     Lam  :: LName     -> Bind p Check                    -> Chk p
-    Sig  :: Valid p m => LName -> Inf p -> Bind p Infer  -> Exp p m
+    Sig  :: Valid p m => LName -> Inf p -> Bind p Infer  -> Exp p   m
     Pair :: Chk p     -> Chk p                           -> Chk p
-    Eql  :: Valid p m => Inf p -> Chk p -> Chk p         -> Exp p m
+    Eql  :: Valid p m => Inf p -> Chk p -> Chk p         -> Exp p   m
     Refl ::                                                 Chk p
-    Use  :: Valid p m => Spine p m (Node l) Check        -> Exp p m
+    Use  :: Valid p m => Spine p m Rigid Check           -> Exp p   m
     Let  :: LName     -> Chk Syn -> Inf Syn -> Exp Syn m -> Exp Syn m
 
 data Cl = forall m. Cl Env (Exp Syn m)

@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 
 module Wellscoped where
@@ -42,15 +43,19 @@ ws raw = case raw of
     RLet   x t v b -> Let (LName x) <$> ws @Check v <*> ws @Infer t <*> withVar x (ws @m b)
     RVar   x       -> resolve x
 
-    RApp f a -> withS f $ \s -> do
-        arg  <- ws @Check a
-        case view s of { VLocal -> pure $ Use $ App s arg; VGlobal -> pure $ Use $ App s arg; }
+    RApp f a -> ws @Infer f >>= \case
+        Use s -> do
+            arg <- ws @Check a
+            pure $ Use $ App s arg
+        _     -> wsErr
         
-    RFst t -> withS t $ \s -> 
-        pure $ Use (App (Head Fst) s)
+    RFst t -> ws @Infer t >>= \case
+        Use s -> pure $ Use (App (Head Fst) s)
+        _     -> wsErr
 
-    RSnd t -> withS t $ \s -> 
-        pure $ Use (App (Head Snd) s)
+    RSnd t -> ws @Infer t >>= \case
+        Use s -> pure $ Use (App (Head Snd) s)
+        _     -> wsErr
 
     RInd l p z s n -> do
         cn <- ws @Check n; cp <- ws @Check p; cz <- ws @Check z; cs <- ws @Check s
@@ -62,7 +67,9 @@ ws raw = case raw of
         pure $ Use (App (Head (J ca cx (Ul l) cp cq cy)) ce)
 
     RContra t -> case mode @m of 
-        SCheck -> withS t $ \s -> pure $ Use (App (Head Contra) s)
+        SCheck -> ws @Infer t >>= \case
+            Use s -> pure $ Use (App (Head Contra) s)
+            _     -> wsErr
         _      -> wsErr
 
     RLam x b -> case mode @m of 
@@ -81,21 +88,10 @@ ws raw = case raw of
         SCheck -> pure $ Use (Head (Hole (HName n)))
         _      -> wsErr
     
-    where wsErr = lift . Left $ "Cannot infer expression: " ++ ppRaw raw
-    
-          withS :: Raw -> (forall l. Spine Syn Infer (Node l) Check -> SC a) -> SC a
-          withS t k = ws @Infer t >>= \case
-              Use s -> k s 
-              _     -> lift $ Left "Expected a spine (variable, reference, or application), but got a canonical term."
-
-          -- Left for locals, Right for globals
+    where wsErr               = lift . Left $ "Cannot infer expression: " ++ ppRaw raw
+          withVar    x        = local \c -> c { scLocals = x : scLocals c }
           lookupName name ctx = (Left <$> elemIndex name (scLocals ctx)) <|> (Right (RName name) <$ guard (RName name `elem` scGlobals ctx))
-            
-          resolve :: String -> SC (Sy m)
-          resolve n = asks (lookupName n) >>= \case
+          resolve    n        = asks (lookupName n) >>= \case
               Nothing        -> lift $ Left $ "Var not in scope: " ++ n
               Just (Left i)  -> pure $ var (Ix i)
               Just (Right r) -> pure $ Use (Head (Ref r))
-           
-          withVar :: String -> SC a -> SC a
-          withVar x = local \c -> c { scLocals = x : scLocals c }

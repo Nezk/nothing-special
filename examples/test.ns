@@ -47,7 +47,7 @@ addAssoc :
     := \i j k.
        ind {0} (\x. add x (add j k) = add (add x j) k @ Nat)
        	       refl
-	       (\i' prev. ap Nat Nat (add i' (add j k)) (add (add i' j) k) (\n. S n) prev)
+	       (\i' prev. ?h) -- ap Nat Nat (add i' (add j k)) (add (add i' j) k) (\n. S n) prev)
 	       i
 
 ------------------------------------------------------------
@@ -192,3 +192,13 @@ coprodInd :
   := \A B P l r x.
      boolInd (\b. (v : ifU A B b) -> P (b, v)) l r x.1 x.2
 
+------------------------------------------------------------
+
+idNat : Nat -> Nat
+    := \n. ind {0} (\_. Nat) Z (\_ r. S r) n
+
+idNat' : Nat -> Nat
+    := \n. ind {0} (\_. Nat) Z (\_ r. S r) n
+
+test : idNat = idNat' @ (Nat -> Nat)
+     := refl

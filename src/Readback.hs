@@ -29,8 +29,7 @@ rbS :: REnv -> Lv -> Spine Sem None s arg -> Spine Nrm None s arg
 rbS renv lv = \case
     Head h  -> Head (rbH renv lv h)
     App s a -> case view s of
-            VLocal  -> App s' (rb  renv lv a)
-            VGlobal -> internalErr "Ref in Sem App"
+            VRigid  -> App s' (rb  renv lv a)
             VStrict -> App s' (rbS renv lv a)
             VFlex   -> App s' (rbS renv lv a)
             where s' = rbS renv lv s

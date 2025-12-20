@@ -31,8 +31,7 @@ ppCl = \case
     []          -> \_             -> internalErr "ppCl: Empty context"
     ctx@(x : _) -> \(Cl env body) ->
         let envNames    = [ LName ("#" ++ show i) | i <- [0..length env - 1] ]
-            bodyCtx     = x : envNames
-            bodyPP      = pp' 0 bodyCtx body
+            bodyPP      = pp' 0 (x : envNames) body
             dumpVal i v = "#" ++ show i ++ " = " ++ pp' 0 ctx v 
         in bodyPP ++ " { " ++ intercalate ", " (zipWith dumpVal [(0 :: Int)..] env) ++ " }"
 
@@ -66,18 +65,15 @@ ppS p ctx = \case
             Head Snd -> ppArg ++ ".2"
             _        -> parens (p > 3) $ unwords [ppS 3 ctx s, ppArg]
         where ppArg = case view s of
-                         VLocal  -> pp' 4 ctx arg
-                         VGlobal -> case phase @p of
-                              SSyn -> pp' 4 ctx arg
-                              _    -> internalErr "TODO"
+                         VRigid  -> pp' 4 ctx arg
                          VStrict -> case phase @p of
-                              SSyn -> ppS 4 ctx arg
-                              SSem -> ppS 4 ctx arg
-                              SNrm -> ppS 4 ctx arg
+                             SSyn -> ppS 4 ctx arg
+                             SSem -> ppS 4 ctx arg
+                             SNrm -> ppS 4 ctx arg
                          VFlex   -> case phase @p of
-                              SSyn -> pp' 4 ctx arg
-                              SSem -> ppS 4 ctx arg 
-                              SNrm -> ppS 4 ctx arg 
+                             SSyn -> pp' 4 ctx arg
+                             SSem -> ppS 4 ctx arg
+                             SNrm -> ppS 4 ctx arg
     Head h -> ppH ctx h
 
 
