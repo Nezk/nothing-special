@@ -124,7 +124,7 @@ convS s s' = catchError match delta
           (VFlex,   VFlex)   -> convS a a'
           _                  -> mismatch "View mismatch" (P.ppS 0) s (P.ppS 0) s'
         delta err = case (view s, view s') of -- both spines are rigid because of Use
-          (VRigid, VRigid) -> expand s  (`conv` Use s') -- Trying to unfold the left  spine, applying conv if succeed
+          (VRigid, VRigid) -> expand s  (`conv` Use s') -- Trying to unfold the left  spine, applying conv if it succeeds
                             $ expand s' (conv  (Use s)) -- Trying to unfold the right spine
                             $ throwError err                       
           _                -> throwError err
@@ -139,7 +139,7 @@ convH h h' = case (h, h') of
     (Contra,        Contra)                        -> pure ()
     (Ind k p z s,   Ind k' p' z' s')     | k == k' -> conv p p' >> conv z z' >> conv s s'
     (J a x k p q y, J a' x' k' p' q' y') | k == k' -> conv a a' >> conv x x' >> conv p p' >> conv q q' >> conv y y'
-    _                                              -> mismatch "Head mismatch" P.ppH h P.ppH h' -- delta in convS is already unfolds cases when convH fails
+    _                                              -> mismatch "Head mismatch" P.ppH h P.ppH h' -- delta in convS already unfolds cases when convH fails
     
 -- Typechecking ---------------------------------------------------------------
 
@@ -174,7 +174,7 @@ asSig v = force v >>= \case
 
 -- Ensures we don’t try to use a checking term in inference position
 type family Flow (i :: Mode) (o :: Mode) :: Constraint where
-    Flow Check Infer = TypeError (Text "Directionality Error: Cannot infer type for a term that tyuires checking mode.")
+    Flow Check Infer = TypeError (Text "Directionality Error: Cannot infer type for a term that requires checking mode.")
     Flow _     _     = ()
 
 type family TcTy (m :: Mode) where

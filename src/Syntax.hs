@@ -48,8 +48,8 @@ type family Choice (p :: Phase) (s :: Status) (arg :: Mode) where
     Choice Syn Flex   arg = Exp   Syn            arg
     Choice p   Flex   arg = Spine p   None Rigid Check
      -- Strict (Projections, Contra):
-     -- In Syntax:   They accept spines with nodes of status with any locality (global or local)
-     -- In Semantics They accept spines "local" nodes
+     -- In Syntax:    They accept spines
+     -- In Semantics: They accept spines
     Choice Syn Strict arg = Spine Syn arg  Rigid Check
     Choice p   Strict arg = Spine p   None Rigid Check    
 

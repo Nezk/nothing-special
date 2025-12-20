@@ -32,7 +32,7 @@ eval renv env = \case
 
 evalS :: REnv -> Env -> Spine Syn m s arg -> Res s arg
 evalS renv env = \case
-    Head h    -> evalH renv env h
+    Head h     -> evalH renv env h
     App  s arg -> 
         let f = evalS renv env s
         in case view s of
