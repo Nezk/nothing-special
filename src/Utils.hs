@@ -7,24 +7,6 @@ module Utils where
 
 import Syntax
 
-data SMode (m :: Mode) where
-    SInfer :: SMode Infer
-    SCheck :: SMode Check
-
-data SPhase (p :: Phase) where
-    SSyn :: SPhase Syn
-    SSem :: SPhase Sem
-    SNrm :: SPhase Nrm
-
-class    PPPhase (p :: Phase) where phase :: SPhase p
-instance PPPhase Syn          where phase = SSyn
-instance PPPhase Sem          where phase = SSem
-instance PPPhase Nrm          where phase = SNrm
-
-class    HasMode (m :: Mode) where mode :: SMode m
-instance HasMode Infer       where mode = SInfer
-instance HasMode Check       where mode = SCheck
-
 data View s arg where
     VRigid  :: View Rigid  Check
     VStrict :: View Strict arg

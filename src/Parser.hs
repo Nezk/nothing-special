@@ -23,7 +23,7 @@ import Wellscoped
 type Parser = Parsec String ()
 
 langDef :: T.LanguageDef ()
-langDef = emptyDef 
+langDef = emptyDef
     { T.commentStart    = "{-",
       T.commentEnd      = "-}",
       T.commentLine     = "--",
@@ -46,8 +46,8 @@ whiteSpace = T.whiteSpace lexer
 integer    = fromIntegral <$> T.integer lexer
 
 pTerm :: Parser Raw
-pTerm = pLet 
-    <|> pLam 
+pTerm = try pLet
+    <|> try pLam
     <|> try pDep
     <|> do
         t <- pExpr
@@ -77,11 +77,10 @@ pSpine = do
 
 pProj :: Parser Raw
 pProj = pAtom >>= go
-  where 
-    go t = choice
-        [reservedOp ".1" >> go (RFst t),
-         reservedOp ".2" >> go (RSnd t),
-         return t]
+  where go t = choice
+          [reservedOp ".1" >> go (RFst t),
+           reservedOp ".2" >> go (RSnd t),
+           return t]
 
 pAtom :: Parser Raw
 pAtom = choice
@@ -96,7 +95,7 @@ pAtom = choice
          pHole,
          pVar,
          parens pPair]
-        
+
 pHole :: Parser Raw
 pHole = do
     reservedOp "?"
@@ -122,8 +121,7 @@ pLet :: Parser Raw
 pLet = do
     reserved "let"
     x <- identifier
-    reservedOp ":"
-    ty <- pTerm
+    ty <- optionMaybe $ do reservedOp ":"; pTerm
     reservedOp ":=" <|> reservedOp "≔"
     val <- pTerm
     reserved "in"
@@ -140,13 +138,12 @@ pLam = do
 pDep :: Parser Raw
 pDep = do
     tel <- many1 pTele
-    choice 
-        [do reservedOp "->" <|> reservedOp "→"
-            body <- pTerm
-            return $ foldr (\(x, t) b -> RPi x t b) body (concat tel),
-         do reservedOp "*" <|> reservedOp "×"
-            body <- pTerm
-            return $ foldr (\(x, t) b -> RSigma x t b) body (concat tel)]
+    choice [do reservedOp "->" <|> reservedOp "→"
+               body <- pTerm
+               return $ foldr (\(x, t) b -> RPi x t b) body (concat tel),
+            do reservedOp "*" <|> reservedOp "×"
+               body <- pTerm
+               return $ foldr (\(x, t) b -> RSigma x t b) body (concat tel)]
 
 pTele :: Parser [(String, Raw)]
 pTele = parens $ do

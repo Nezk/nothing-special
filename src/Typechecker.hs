@@ -36,17 +36,17 @@ import qualified Pretty as P
 data Ctx =
   Ctx { ctxREnv :: REnv,
         ctxRTys :: RTys,
-        
+
         ctxEnv :: Env,
         ctxTys :: Tys,
-        
+
         ctxNames :: LNames,
-        
+
         ctxLv :: Lv }
 
 type Log = [String]
 
-newtype TC a 
+newtype TC a
     = TC { unTC :: ReaderT Ctx (ExceptT String (Writer Log)) a }
     deriving (Functor, Applicative, Monad, MonadError String, MonadWriter Log, MonadReader Ctx)
 
@@ -54,7 +54,7 @@ runTC :: Ctx -> TC a -> (Either String a, Log)
 runTC ctx = runWriter . runExceptT . flip runReaderT ctx . unTC
 
 withBind :: LName -> Vl -> TC a -> TC a
-withBind name ty = local \c -> c 
+withBind name ty = local \c -> c
     { ctxEnv   = var c.ctxLv             : c.ctxEnv,
       ctxTys   = ty                      : c.ctxTys,
       ctxNames = P.fresh name c.ctxNames : c.ctxNames,
@@ -117,7 +117,7 @@ convS s s' = catchError match delta
           (Head h,   Head h')   -> convH h h'
           (App l r,  App l' r') -> convS l l' >> convArgs (view l) (view l') r r'
           _                     -> mismatch "Shape mismatch" (P.ppS 0) s (P.ppS 0) s'
-        convArgs :: View s a -> View s' a' -> Choice Sem s a -> Choice Sem s' a' -> TC ()  
+        convArgs :: View s a -> View s' a' -> Choice Sem s a -> Choice Sem s' a' -> TC ()
         convArgs v v' a a' = case (v, v') of
           (VRigid,  VRigid)  -> conv  a a'
           (VStrict, VStrict) -> convS a a'
@@ -126,7 +126,7 @@ convS s s' = catchError match delta
         delta err = case (view s, view s') of -- both spines are rigid because of Use
           (VRigid, VRigid) -> expand s  (`conv` Use s') -- Trying to unfold the left  spine, applying conv if it succeeds
                             $ expand s' (conv  (Use s)) -- Trying to unfold the right spine
-                            $ throwError err                       
+                            $ throwError err
           _                -> throwError err
 
 convH :: Head Sem None s a -> Head Sem None s' a' -> TC ()
@@ -140,7 +140,7 @@ convH h h' = case (h, h') of
     (Ind k p z s,   Ind k' p' z' s')     | k == k' -> conv p p' >> conv z z' >> conv s s'
     (J a x k p q y, J a' x' k' p' q' y') | k == k' -> conv a a' >> conv x x' >> conv p p' >> conv q q' >> conv y y'
     _                                              -> mismatch "Head mismatch" P.ppH h P.ppH h' -- delta in convS already unfolds cases when convH fails
-    
+
 -- Typechecking ---------------------------------------------------------------
 
 reportHole :: HName -> Vl -> TC ()
@@ -182,7 +182,7 @@ type family TcTy (m :: Mode) where
     TcTy Check = Vl -> TC ()
 
 class HasMode m => Typing m where
-    yield :: Vl                                 -> TcTy m 
+    yield :: Vl                                 -> TcTy m
     bind  :: TC (TcTy m)                        -> TcTy m
     scope :: (forall a. TC a -> TC a) -> TcTy m -> TcTy m
 
@@ -203,7 +203,7 @@ tc :: forall m. Typing m => Exp Syn m -> TcTy m
 tc = \case
     Use s -> tcS @m s
 
-    Lam x b -> \ty -> do 
+    Lam x b -> \ty -> do
         (dom, Cl env body) <- asPi ty
         vBodyTy            <- asks \c -> eval c.ctxREnv (var c.ctxLv : env) body
         withBind x dom $ tc b vBodyTy
@@ -215,45 +215,45 @@ tc = \case
         vBodyTy <- asks \c -> eval c.ctxREnv (va : env) body
         tc b vBodyTy
 
-    Refl -> \ty -> do 
+    Refl -> \ty -> do
         ty' <- force ty
-        case ty' of 
+        case ty' of
             Eql _ x y -> conv x y
             _         -> expected "Eql type" P.pp ty'
-        
+
     U i  -> yield @m $ U $ Ul $ unUl i + 1
     Nat  -> yield @m $ U 0
     Zero -> yield @m $ Nat
-    
+
     Succ k -> inst @m $ do
         tc k Nat
         pure Nat
 
-    Pi x a b -> inst @m $ do 
+    Pi x a b -> inst @m $ do
         l  <- isType a
         va <- asks \c -> eval c.ctxREnv c.ctxEnv a
         l' <- withBind x va $ isType b
         pure $ U $ max l l'
 
-    Sig x a b -> inst @m $ do 
-        l1 <- isType a 
+    Sig x a b -> inst @m $ do
+        l1 <- isType a
         va <- asks \c -> eval c.ctxREnv c.ctxEnv a
         l2 <- withBind x va $ isType b
         pure $ U $ max l1 l2
-        
-    Eql a x y -> inst @m $ do 
+
+    Eql a x y -> inst @m $ do
         l <- isType a
         va <- asks \c -> eval c.ctxREnv c.ctxEnv a
         tc x va
         tc y va
         pure $ U l
-    
-    Let x e t body -> bind @m $ do 
-        _   <- isType t
-        vTy <- asks \c -> eval c.ctxREnv c.ctxEnv t
-        tc e vTy
-        vE  <- asks \c -> eval c.ctxREnv c.ctxEnv e
-        pure $ scope @m (withDef x vE vTy) (tc body)
+
+    Let @m' x d b -> bind @m $ do
+        (v, vty) <- case mode @m' of
+            SInfer -> flip (,) <$> tc d         <*> asks (\c ->  eval c.ctxREnv c.ctxEnv d)
+            SCheck -> let (e, t) = d in isType t >> asks (\c ->  eval c.ctxREnv c.ctxEnv t)
+                      >>= \vty' -> tc e vty'     >> asks (\c -> (eval c.ctxREnv c.ctxEnv e, vty'))
+        pure $ scope @m (withDef x v vty) (tc b)
 
 tcS :: forall m m'. (Valid Syn m', Flow m' m, Typing m) => Spine Syn m' Rigid Check -> TcTy m
 tcS = \case
@@ -262,7 +262,7 @@ tcS = \case
         VRigid  -> tcApp @m (tcS @Infer) s arg
         VFlex   -> tcApp @m tcFlex       s arg
         VStrict -> case s of Head h -> tcAppStrict @m h arg
-        
+
 tcH :: forall m m'. (Valid Syn m', Flow m' m, Typing m) => Head Syn m' Rigid Check -> TcTy m
 tcH = \case
     Var i  -> inst @m $ asks    \c -> c.ctxTys !! unIx i
@@ -274,31 +274,30 @@ tcFlex (Head h) = case h of
     Ind u p z s -> do
         tc p $ Pi "_" Nat (Cl [] (U u :: Exp Syn Infer))
         vp   <- asks \c -> eval c.ctxREnv c.ctxEnv p
-        
+
         zTy <- asks \c -> app c.ctxREnv vp Zero
         tc z zTy
-        
+
         -- Domain: P n
-        -- Context: [n : Nat, P : Nat -> U l, ...] 
-        -- Indices:  0        1         
+        -- Context: [n : Nat, P : Nat -> U l, ...]
+        -- Indices:  0        1
         let dom = Use $ App (Head (Var 1)) (var 0)
         -- Context: [hyp : P n, n : Nat, P : Nat -> U l, ...]
         -- Indices:  0          1        2
         let cod = Use $ App (Head (Var 2)) (Succ (var 1))
-        
+
         let body :: Exp Syn Infer = Pi "_" dom cod
         let sTy  = Pi "_" Nat (Cl [vp] body)
-        
+
         tc s sTy
-        
+
         let resTy :: Exp Syn Infer = Use $ App (Head (Var 1)) (var 0)
         pure $ Pi "n" Nat (Cl [vp] resTy)
-    
-    J a x u p q y -> do
 
-        _ <- isType a 
+    J a x u p q y -> do
+        _ <- isType a
         va <- asks \c -> eval c.ctxREnv c.ctxEnv a
-        
+
         tc x va
         vx <- asks \c -> eval c.ctxREnv c.ctxEnv x
 
@@ -309,17 +308,17 @@ tcFlex (Head h) = case h of
         let pTy                   = Pi "_" va (Cl [vx, va] body)
         tc p pTy
         vp <- asks \c -> eval c.ctxREnv c.ctxEnv p
-        
+
         qTy <- asks \c -> app c.ctxREnv (app c.ctxREnv vp vx) Refl
         tc q qTy
-        
+
         tc y va
         vy <- asks \c -> eval c.ctxREnv c.ctxEnv y
-        
+
         -- (e : Eql A x y) -> P y e
         let dom = Eql va vx vy
         -- P y e
-        -- Indices: 0 -> e, 1 -> vy, 2 -> vp        
+        -- Indices: 0 -> e, 1 -> vy, 2 -> vp
         let cod :: Exp Syn Infer = Use $ App (App (Head (Var 2)) (var 1)) (var 0)
         pure $ Pi "_" dom (Cl [vy, vp] cod)
 

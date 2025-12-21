@@ -84,8 +84,8 @@ addComm : (n k : Nat) -> add n k = add k n @ Nat
      ind {0} (\x. add x k = add k x @ Nat)
      	     (addZ k)
 	     (\k' h.
-	       let e  : S (add k' k)  = S (add k k') @ Nat := apS  (add k' k) (add k k') h in
-	       let e' : S (add k  k') = add k (S k') @ Nat := addS k          k'           in
+	       let e  := apS  (add k' k) (add k k') h in
+	       let e' := addS k          k'           in
 	       trans Nat (S (add k' k)) (S (add k k')) (add k (S k')) e e')
 	     n
 
@@ -97,22 +97,22 @@ recProd : (A B C : U 0) -> (A -> B -> C) -> (A * B) -> C
 uppt : (A B : U 0) -> (p : A * B) -> (p.1, p.2) = p @ (A * B)
     := \A B p. refl
 
-indProd 
-    : (A B : U 0) 
-   -> (C : A * B -> U 0) 
-   -> ((x : A) -> (y : B) -> C (x, y)) 
+indProd
+    : (A B : U 0)
+   -> (C : A * B -> U 0)
+   -> ((x : A) -> (y : B) -> C (x, y))
    -> ((p : A * B) -> C p)
    := \A B C g p. g p.1 p.2
 
-pairEq : 
-    (A B : U 0) 
- -> (p q : A * B) 
- -> p.1 = q.1 @ A 
- -> p.2 = q.2 @ B 
+pairEq :
+    (A B : U 0)
+ -> (p q : A * B)
+ -> p.1 = q.1 @ A
+ -> p.2 = q.2 @ B
  -> p = q @ (A * B)
-    := \A B p q e e'. 
-         let hyp  : p = (q.1, p.2) @ (A * B) := subst A (\x. p = (x, p.2) @ (A * B)) p.1 q.1 e  refl in
-         let hyp' : p = (q.1, q.2) @ (A * B) := subst B (\x. p = (q.1, x) @ (A * B)) p.2 q.2 e' hyp  in
+    := \A B p q e e'.
+         let hyp  := subst A (\x. p = (x, p.2) @ (A * B)) p.1 q.1 e  refl in
+         let hyp' := subst B (\x. p = (q.1, x) @ (A * B)) p.2 q.2 e' hyp  in
          subst (A * B) (\x. p = x @ (A * B)) (q.1, q.2) q refl hyp'
 
 ac :
@@ -123,7 +123,7 @@ ac :
  := \A B R g.
     (\x. (g x).1, \x. (g x).2) -- (f : A -> B) * (x : A) -> R x (f x) | f := \x. (g x).1
                                -- (x : A) -> R x (g x).1
-			       
+
          	 	       -- (y : B) * R x y | y := (g x).1
 			       -- R x (g x).1
 ------------------------------------------------------------
@@ -163,7 +163,7 @@ isZero : Nat -> U 0
        := recNat1 (U 0) Unit (\_ _. Void)
 
 isBool : Nat -> U 0
-       := recNat1 (U 0) Unit (\k _. isZero k) 
+       := recNat1 (U 0) Unit (\k _. isZero k)
 
 Bool  : U 0  := (n : Nat) * isBool n
 true  : Bool := (Z,   star)
@@ -174,22 +174,22 @@ boolInd :
  -> P true
  -> P false
  -> (b : Bool) -> P b
- := \P pt pf b. 
+ := \P pt pf b.
     ind {0}
     	-- motive
     	(\n. (h : isBool n) -> P (n, h))
 	-- 0 => True
-    	(\h. let e  : h = star @ Unit := unitEq h in
-	     let e' : star = h @ Unit := sym Unit h star e in
+    	(\h. let e  := unitEq h in
+	     let e' := sym Unit h star e in
 	     subst Unit (\u. P (Z, u)) star h e' pt)
 	-- k + 1
 	(\k _. ind {0} (\x. (hx : isZero x) -> P (S x, hx))
 		       -- hx : Unit
 	       	       -- P (S Z, star)
-	       	       (\hx. let e  : hx = star @ Unit := unitEq hx in
-		             let e' : star = hx @ Unit := sym Unit hx star e in
+	       	       (\hx. let e  := unitEq hx in
+		             let e' := sym Unit hx star e in
 			     subst Unit (\u. P (S Z, u)) star hx e' pf)
-	       	       -- hx : Void			     
+	       	       -- hx : Void
 	       	       -- P (S (S k'), hx)
 	       	       (\k' _ hx. contra hx)
 	       	       k)
@@ -201,15 +201,15 @@ boolInd1 :
  -> P true
  -> P false
  -> (b : Bool) -> P b
- := \P pt pf b. 
+ := \P pt pf b.
     ind {1}
         (\n. (h : isBool n) -> P (n, h))
-        (\h. let e  : h = star @ Unit := unitEq h in
-             let e' : star = h @ Unit := sym Unit h star e in
+        (\h. let e  := unitEq h in
+             let e' := sym Unit h star e in
              subst1 Unit (\u. P (Z, u)) star h e' pt)
     (\k _. ind {1} (\x. (hx : isZero x) -> P (S x, hx))
-               (\hx. let e  : hx = star @ Unit := unitEq hx in
-                     let e' : star = hx @ Unit := sym Unit hx star e in
+               (\hx. let e  := unitEq hx in
+                     let e' := sym Unit hx star e in
                      subst1 Unit (\u. P (S Z, u)) star hx e' pf)
                (\k' _ hx. contra hx)
                k)
@@ -247,3 +247,10 @@ idNat' : Nat -> Nat
 
 test : idNat = idNat' @ (Nat -> Nat)
      := refl
+
+test2 : Nat
+      := let id' : Nat -> Nat := \n. n in
+      	 id' Z
+
+test3 : Nat
+      := let z : Nat := Z in z

@@ -5,6 +5,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeAbstractions #-}
 
 module Pretty where
 
@@ -40,20 +41,21 @@ pp = pp' 0
 
 pp' :: forall p m. PPPhase p => Int -> LNames -> Exp p m -> String
 pp' p ctx = \case
-    U (Ul i)     -> "U" ++ sub i
-    Nat          -> "ℕ"
-    Zero         -> "Z"
-    Succ n       -> parens (p > 3) $ "S " ++ pp' 4 ctx n
-    Pi   x a b   -> ppBinder 0 1 "→" p x a b
-    Sig  x a b   -> ppBinder 2 3 "×" p x a b
-    Lam  x   b   -> parens (p > 0) $ withFresh ctx x $ \x' ctx' -> 
-                    "λ" ++ unLName x'  ++ ". " ++ ppBind @p @Check 0 ctx' b
-    Pair   a b   -> "(" ++ pp' 0 ctx a ++ ", " ++ pp' 0 ctx b ++ ")"
-    Eql  t x y   -> parens (p > 1) $ unwords [pp' 2 ctx x, "=", pp' 2 ctx y, "@", pp' 3 ctx t]
-    Refl         -> "refl"    
-    Use  s       -> ppS p ctx s
-    Let  x t v b -> parens (p > 0) $ withFresh ctx x $ \x' ctx' -> 
-                    unwords ["let", unLName x', ":", pp' 0 ctx t, ":=", pp' 0 ctx v, "in", pp' 0 ctx' b]
+    U         i   -> "U" ++ sub (unUl i)
+    Nat           -> "ℕ"
+    Zero          -> "Z"
+    Succ      n   -> parens (p > 3) $ "S " ++ pp' 4 ctx n
+    Pi  x     a b -> ppBinder 0 1 "→" p x a b
+    Sig x     a b -> ppBinder 2 3 "×" p x a b
+    Lam x       b -> parens (p > 0) $ withFresh ctx x $ \x' ctx' -> 
+                     "λ" ++ unLName x'  ++ ". " ++ ppBind @p @Check 0 ctx' b
+    Pair      a b -> "(" ++ pp' 0 ctx a ++ ", " ++ pp' 0 ctx b ++ ")"
+    Eql     t a b -> parens (p > 1) $ unwords [pp' 2 ctx a, "=", pp' 2 ctx b, "@", pp' 3 ctx t]
+    Refl          -> "refl"    
+    Use       s   -> ppS p ctx s
+    Let @m' x d b -> parens (p > 0) $ withFresh ctx x $ \x' ctx' ->
+                     let d' = case mode @m' of SInfer -> unwords [unLName x', ":=", pp' 0 ctx d]; SCheck -> unwords [unLName x', ":", pp' 0 ctx (snd d), ":=", pp' 0 ctx (fst d)]
+                     in unwords ["let", d', "in", pp' 0 ctx' b]
     where ppBinder thP argP op prec x a b = parens (prec > thP) $ withFresh ctx x $ \x' ctx' -> unwords [ppDomain argP x x' a, op, ppBind @p @Infer 0 ctx' b]
           ppDomain argP x x' a            = if unLName x == "_" then pp' argP ctx a else "(" ++ unLName x' ++ " : " ++ pp' 0 ctx a ++ ")"         
 
@@ -112,7 +114,8 @@ ppRaw' p = \case
     RSigma x   a b      -> parens (p > 0) $ unwords ["(" ++ x ++ " :", ppRaw' 0 a ++ ")", "×", ppRaw' 0 b]
     RTimes     a b      -> ppTimes p a b
     RLam   x     b      -> parens (p > 0) $ "λ" ++ x ++ ". " ++ ppRaw' 0 b
-    RLet   x t v b      -> parens (p > 0) $ unwords ["let", x, ":", ppRaw' 0 t, ":=", ppRaw' 0 v, "in", ppRaw' 0 b]
+    RLet   x t v b      -> let decl = maybe (unwords [x, ":=", ppRaw' 0 v]) (\ty -> unwords [x, ":", ppRaw' 0 ty, ":=", ppRaw' 0 v]) t
+                           in parens (p > 0) $ unwords ["let", decl, "in", ppRaw' 0 b]
     RApp   f   a        -> parens (p > 3) $ unwords [ppRaw' 3 f, ppRaw' 4 a]
     RPair      a b      -> "(" ++ ppRaw' 0 a ++ ", " ++ ppRaw' 0 b ++ ")"
     RFst     t          -> ppRaw' 4 t ++ ".1"

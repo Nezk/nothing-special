@@ -15,17 +15,17 @@ import Data.Map.Strict (Map)
 
 import GHC.TypeLits (TypeError, ErrorMessage(..))
 
-newtype RName = RName { unRName :: String } deriving (Show, Eq, Ord, IsString) via String 
-newtype LName = LName { unLName :: String } deriving (Show, Eq, Ord, IsString) via String 
-newtype HName = HName { unHName :: String } deriving (Show, Eq, Ord, IsString) via String 
+newtype RName = RName { unRName :: String } deriving (Show, Eq, Ord, IsString) via String
+newtype LName = LName { unLName :: String } deriving (Show, Eq, Ord, IsString) via String
+newtype HName = HName { unHName :: String } deriving (Show, Eq, Ord, IsString) via String
 
-newtype Ix = Ix { unIx :: Int } deriving (Show, Num, Eq)      via Int 
-newtype Lv = Lv { unLv :: Int } deriving (Show, Num, Eq)      via Int 
-newtype Ul = Ul { unUl :: Int } deriving (Show, Num, Eq, Ord) via Int 
+newtype Ix = Ix { unIx :: Int } deriving (Show, Num, Eq)      via Int
+newtype Lv = Lv { unLv :: Int } deriving (Show, Num, Eq)      via Int
+newtype Ul = Ul { unUl :: Int } deriving (Show, Num, Eq, Ord) via Int
 
-data Mode     = Infer | Check  | None
-data Phase    = Syn   | Sem    | Nrm
-data Status   = Rigid | Flex   | Strict
+data Mode   = Infer | Check  | None
+data Phase  = Syn   | Sem    | Nrm
+data Status = Rigid | Flex   | Strict
 
 type family T (p :: Phase) (m :: Mode) :: Mode where
     T Syn m = m
@@ -47,20 +47,19 @@ type family Choice (p :: Phase) (s :: Status) (arg :: Mode) where
     --               Thus, they accept spines.
     Choice Syn Flex   arg = Exp   Syn            arg
     Choice p   Flex   arg = Spine p   None Rigid Check
-     -- Strict (Projections, Contra):
-     -- In Syntax:    They accept spines
-     -- In Semantics: They accept spines
+    -- Strict (Projections, Contra):
+    -- In Syntax:    They accept spines
+    -- In Semantics: They accept spines
     Choice Syn Strict arg = Spine Syn arg  Rigid Check
-    Choice p   Strict arg = Spine p   None Rigid Check    
+    Choice p   Strict arg = Spine p   None Rigid Check
 
--- Ensures that only valid Modes are used in specific Phases.    
 type family Bind (p :: Phase) (m :: Mode) where
-    Bind Syn m = Exp Syn m   
-    Bind Sem _ = Cl          
+    Bind Syn m = Exp Syn m
+    Bind Sem _ = Cl
     Bind Nrm _ = Exp Nrm None
 
 type Inf p = Exp p (T p Infer)
-type Chk p = Exp p (T p Check)    
+type Chk p = Exp p (T p Check)
 
 type family Valid (p :: Phase) (m :: Mode) :: Constraint where
     Valid Syn None  = TypeError (Text "Invalid Mode: None in phase: Syn")
@@ -73,11 +72,15 @@ type family TApp (p :: Phase) (s :: Status) (m :: Mode) :: Mode where
     TApp Syn _     m = m
     TApp _   _     _ = None
 
+type family LetDef (m :: Mode) where
+    LetDef Infer = Inf Syn
+    LetDef Check = (Chk Syn, Inf Syn)
+
 data Head (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
     Var  :: Valid p m => V p   -> Head p m           Rigid Check
     Hole :: HName              -> Head p (T p Check) Rigid Check
-    Ref  :: Valid p m => RName -> Head p m           Rigid Check 
-    
+    Ref  :: Valid p m => RName -> Head p m           Rigid Check
+
     Ind :: Valid p m => Ul    -> Chk p -> Chk p -> Chk p                   -> Head p m Flex Check
     J   :: Valid p m => Inf p -> Chk p -> Ul    -> Chk p -> Chk p -> Chk p -> Head p m Flex Check
 
@@ -89,21 +92,39 @@ data Spine (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
     Head :: Valid p m => Head  p m            s arg                   -> Spine p m s     arg
     App  :: Valid p m => Spine p (TApp p s m) s arg -> Choice p s arg -> Spine p m Rigid Check
 
-data Exp (p :: Phase) (m :: Mode) where   
-    U    :: Valid p m => Ul                              -> Exp p   m
-    Nat  :: Valid p m =>                                    Exp p   m
-    Zero :: Valid p m =>                                    Exp p   m
-    Succ :: Valid p m => Chk p                           -> Exp p   m
-    Pi   :: Valid p m => LName -> Inf p -> Bind p Infer  -> Exp p   m
-    Lam  :: LName     -> Bind p Check                    -> Chk p
-    Sig  :: Valid p m => LName -> Inf p -> Bind p Infer  -> Exp p   m
-    Pair :: Chk p     -> Chk p                           -> Chk p
-    Eql  :: Valid p m => Inf p -> Chk p -> Chk p         -> Exp p   m
-    Refl ::                                                 Chk p
-    Use  :: Valid p m => Spine p m Rigid Check           -> Exp p   m
-    Let  :: LName     -> Chk Syn -> Inf Syn -> Exp Syn m -> Exp Syn m
+data Exp (p :: Phase) (m :: Mode) where
+    U    :: Valid p m                               => Ul                              -> Exp p   m
+    Nat  :: Valid p m                               =>                                    Exp p   m
+    Zero :: Valid p m                               =>                                    Exp p   m
+    Succ :: Valid p m                               => Chk p                           -> Exp p   m
+    Pi   :: Valid p m                               => LName -> Inf p -> Bind p Infer  -> Exp p   m
+    Lam  :: LName                                   -> Bind p Check                    -> Chk p
+    Sig  :: Valid p m                               => LName -> Inf p -> Bind p Infer  -> Exp p   m
+    Pair :: Chk p                                   -> Chk p                           -> Chk p
+    Eql  :: Valid p m                               => Inf p -> Chk p -> Chk p         -> Exp p   m
+    Refl ::                                                                               Chk p
+    Use  :: Valid p m                               => Spine p m Rigid Check           -> Exp p   m
+    Let  :: (Valid Syn m', HasMode m', Valid Syn m) => LName -> LetDef m' -> Exp Syn m -> Exp Syn m
 
 data Cl = forall m. Cl Env (Exp Syn m)
+
+data SMode (m :: Mode) where
+    SInfer :: SMode Infer
+    SCheck :: SMode Check
+
+class    HasMode (m :: Mode) where mode :: SMode m
+instance HasMode Infer       where mode = SInfer
+instance HasMode Check       where mode = SCheck
+
+data SPhase (p :: Phase) where
+    SSyn :: SPhase Syn
+    SSem :: SPhase Sem
+    SNrm :: SPhase Nrm
+
+class    PPPhase (p :: Phase) where phase :: SPhase p
+instance PPPhase Syn          where phase = SSyn
+instance PPPhase Sem          where phase = SSem
+instance PPPhase Nrm          where phase = SNrm
 
 type Sy m = Exp Syn m
 type Vl   = Exp Sem None
@@ -123,20 +144,20 @@ data Raw
   | RU     Int
   | RNat
   | RZero
-  | RSucc         Raw
-  | RPi    String Raw Raw
-  | RFun          Raw Raw
-  | RSigma String Raw Raw
-  | RTimes        Raw Raw
-  | RLet   String Raw Raw Raw
-  | RLam   String Raw
-  | RPair         Raw Raw
-  | RFst          Raw
-  | RSnd          Raw
-  | RApp          Raw Raw
-  | REql          Raw Raw Raw
+  | RSucc                     Raw
+  | RPi    String             Raw Raw
+  | RFun                      Raw Raw
+  | RSigma String             Raw Raw
+  | RTimes                    Raw Raw
+  | RLet   String (Maybe Raw) Raw Raw
+  | RLam   String             Raw
+  | RPair                     Raw Raw
+  | RFst                      Raw
+  | RSnd                      Raw
+  | RApp                      Raw Raw
+  | REql                      Raw Raw Raw
   | RRefl
-  | RContra       Raw
-  | RInd   Int    Raw Raw Raw Raw
-  | RJ            Raw Raw Int Raw Raw Raw Raw
+  | RContra                   Raw
+  | RInd   Int                Raw Raw Raw Raw
+  | RJ                        Raw Raw Int Raw Raw Raw Raw
   | RHole  String

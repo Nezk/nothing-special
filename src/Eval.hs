@@ -2,6 +2,8 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeAbstractions #-}
 
 module Eval where
 
@@ -17,18 +19,19 @@ type family Res (s :: Status) (arg :: Mode) where
 
 eval :: REnv -> Env -> Sy m -> Vl
 eval renv env = \case
-    U l         -> U l
-    Nat         -> Nat
-    Zero        -> Zero
-    Succ k      -> Succ      (eval renv env k)
-    Pi x a b    -> Pi   x    (eval renv env a)      (Cl        env b)
-    Lam x b     -> Lam  x    (Cl        env b)
-    Sig x a b   -> Sig  x    (eval renv env a)      (Cl        env b)
-    Pair a b    -> Pair      (eval renv env a)      (eval renv env b)
-    Eql a x y   -> Eql       (eval renv env a)      (eval renv env x) (eval renv env y)
-    Refl        -> Refl
-    Let _ v _ b -> eval renv (eval renv env v : env) b
-    Use s       -> evalS renv env s
+    U         l   -> U l
+    Nat           -> Nat
+    Zero          -> Zero
+    Succ      k   -> Succ      (eval renv env k)
+    Pi  x     a b -> Pi   x    (eval renv env a)      (Cl        env b)
+    Lam x       b -> Lam  x    (Cl        env b)
+    Sig x     a b -> Sig  x    (eval renv env a)      (Cl        env b)
+    Pair      a b -> Pair      (eval renv env a)      (eval renv env b)
+    Eql     t a b -> Eql       (eval renv env t)      (eval renv env a) (eval renv env b)
+    Refl          -> Refl
+    Let @m' _ d b -> let v = case mode @m' of SInfer -> eval renv env d; SCheck -> eval renv env (fst d)
+                     in eval renv (v : env) b
+    Use       s   -> evalS renv env s
 
 evalS :: REnv -> Env -> Spine Syn m s arg -> Res s arg
 evalS renv env = \case
