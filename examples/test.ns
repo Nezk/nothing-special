@@ -1,11 +1,26 @@
 swap : (A B C : U 0) -> (A -> B -> C) -> (B -> A -> C)
     := \A B C g. \b a. g a b
 
+id : (A : U 0) -> (A -> A)
+    := \A a. a
+
+comp : (A B C : U 0) -> (B -> C) -> (A -> B) -> (A -> C)
+    := \A B C g f a. g (f a)
+
 subst : (A : U 0) -> (P : A -> U 0) -> (a b : A) -> a = b @ A -> P a -> P b
     := \A P a b e. J A a {0} (\x _. P a -> P x) (\pa. pa) b e
 
 subst1 : (A : U 0) -> (P : A -> U 1) -> (a b : A) -> a = b @ A -> P a -> P b
     := \A P a b e. J A a {1} (\x _. P a -> P x) (\pa. pa) b e
+
+substU :
+    (P : U 0 -> U 0)
+ -> (A B : U 0)
+ -> A = B @ U 0
+ -> P A
+ -> P B
+ := \P A B e x.
+    J (U 0) A {0} (\X _. P X) x B e
 
 sym : (A : U 0) -> (a b : A) -> a = b @ A -> b = a @ A
    := \A a b e. subst A (\x. x = a @ A) a b e refl
@@ -28,6 +43,96 @@ trans :
    := \A a b c e e'.
       subst A (\x. a = x @ A) b c e' e
 
+transRight :
+      (A : U 0)
+   -> (x y : A)
+   -> (p : x = y @ A) 
+   -> trans A x y y p refl = p @ (x = y @ A)
+   := \A x y p. refl
+
+transLeft :
+      (A : U 0)
+   -> (x y : A)
+   -> (p : x = y @ A) 
+   -> trans A x x y refl p = p @ (x = y @ A)
+   := \A x y e.
+      J A x {0} (\y' e'. trans A x x y' refl e' = e' @ (x = y' @ A)) refl y e
+
+invRight :
+       (A : U 0)
+    -> (x y : A)
+    -> (p : x = y @ A)
+    -> trans A x y x p (sym A x y p) = refl @ (x = x @ A)
+    := \A x y p.
+       J A x {0}
+         (\y' p'. trans A x y' x p' (sym A x y' p') = refl @ (x = x @ A))
+	 refl
+	 y
+	 p
+
+apd : (A : U 0) 
+   -> (P : A -> U 0) 
+   -> (f : (x : A) -> P x) 
+   -> (a b : A) 
+   -> (p : a = b @ A) 
+   -> subst A P a b p (f a) = f b @ (P b)
+   := \A P f a b p.
+      J A a {0} (\b' p'. subst A P a b' p' (f a) = f b' @ (P b'))
+      refl
+      b
+      p
+
+htpy : (A B : U 0) -> (f g : A -> B) -> U 0
+     := \A B f g. (x : A) -> f x = g x @ B
+
+{-
+      f(x) ~ ap f(p) ~ f(y)
+       |                 |
+      H(x)             H(y)
+       |                 |
+      g(x) ~ ap g(p) ~ g(y)
+-}
+htpyNatural :
+    (A B : U 0)
+ -> (f g : A -> B) 
+ -> (H : htpy A B f g)
+ -> (x y : A)
+ -> (p : x = y @ A)
+ -> trans B (f x) (g x) (g y) (H x) (ap A B x y g p) =
+    trans B (f x) (f y) (g y) (ap A B x y f p) (H y)
+    @ (f x = g y @ B)
+ := \A B f g H x y p.
+    J A x {0} (\y' p'. trans B (f x) (g x)  (g y') (H x)  (ap A B x y' g p') =
+      	      	       trans B (f x) (f y') (g y') (ap A B x y' f p') (H y')
+                       @ (f x = g y' @ B))
+    -- H x = trans B (f x) (f x) (g x) refl (H x)
+    (sym (f x = g x @ B)
+    (trans B (f x) (f x) (g x) refl (H x))
+    (H x)
+    (transLeft B (f x) (g x) (H x)))
+    y
+    p
+
+qinv : (A B : U 0) -> (A -> B) -> U 0
+    := \A B f.
+       (g : B -> A)
+     * (htpy A A (comp A B A g f) (id A))
+     * (htpy B B (comp B A B f g) (id B))
+
+idQinv : (A : U 0) -> qinv A A (id A)
+    := \A. (id A, \x. refl, \x. refl)
+
+idtoeqv :
+    (A B : U 0)
+ -> (e : A = B @ U 0)
+ -> qinv A B (substU (\X. A -> X) A B e (id A))
+ := \A B e.
+    J (U 0) A {0}
+      (\B' p. qinv A B' (substU (\X'. A -> X') A B' p (id A)))
+      (idQinv A)
+      B
+      e
+      
 ------------------------------------------------------------
 
 apS :
@@ -88,6 +193,16 @@ addComm : (n k : Nat) -> add n k = add k n @ Nat
 	       let e' := addS k          k'           in
 	       trans Nat (S (add k' k)) (S (add k k')) (add k (S k')) e e')
 	     n
+
+ack : Nat -> Nat -> Nat
+    := \n.
+       recNat (Nat -> Nat)
+       	      (\m. S m)
+	      (\n' ackn'. recNat Nat
+	      	   	 	(ackn' (S Z))
+				(\m' acn'm'. ackn' acn'm'))
+	      n
+
 
 ------------------------------------------------------------
 

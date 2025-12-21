@@ -73,7 +73,7 @@ type family TApp (p :: Phase) (s :: Status) (m :: Mode) :: Mode where
     TApp _   _     _ = None
 
 type family LetDef (m :: Mode) where
-    LetDef Infer = Inf Syn
+    LetDef Infer =  Inf Syn
     LetDef Check = (Chk Syn, Inf Syn)
 
 data Head (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
