@@ -369,3 +369,8 @@ test2 : Nat
 
 test3 : Nat
       := let z : Nat := Z in z
+
+test4 : Nat
+
+test5 : Nat
+    := add (S (S (S Z))) (idNat test4)

@@ -7,7 +7,7 @@
 
 module Eval where
 
-import Data.Map.Strict ((!))
+import qualified Data.Map.Strict as M
 
 import Syntax
 import Utils
@@ -36,7 +36,7 @@ eval renv env = \case
 evalS :: REnv -> Env -> Spine Syn m s arg -> Res s arg
 evalS renv env = \case
     Head h     -> evalH renv env h
-    App  s arg -> 
+    App  s arg ->
         let f = evalS renv env s
         in case view s of
             VRigid  -> app        renv f (eval  renv env arg)
@@ -58,7 +58,7 @@ evalH renv env = \case
 unfold :: REnv -> Spine Sem None Rigid Check -> Maybe Vl
 unfold renv = \case
     Head h -> case h of
-        Ref r -> Just (renv ! r)
+        Ref r -> M.lookup r renv -- unfolding is impossible if it's a postulate
         _     -> Nothing
     App s a -> case view s of
         VRigid -> unfold renv s >>= \f -> pure (app renv f a)
@@ -67,7 +67,7 @@ unfold renv = \case
 app :: REnv -> Vl -> Vl -> Vl
 app renv f a = case f of
     Lam _ (Cl env b) -> eval renv (a : env) b
-    Use s            -> Use $ App s a 
+    Use s            -> Use $ App s a
     _                -> internalErr "app: Ill-typed application"
 
 doFst :: REnv -> Vl -> Vl

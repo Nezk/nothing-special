@@ -154,17 +154,18 @@ pTele = parens $ do
 
 -- Definitions parsing --------------------------------------------------------
 
-pDef :: Parser (String, Raw, Raw)
+pDef :: Parser (String, Raw, Maybe Raw)
 pDef = do
     n <- identifier
     reservedOp ":"
     t <- pTerm
-    reservedOp ":=" <|> reservedOp "≔"
-    v <- pTerm
+    v <- optionMaybe $ do
+        reservedOp ":=" <|> reservedOp "≔"
+        pTerm
     return (n, t, v)
 
-pDefs :: Parser [(String, Raw, Raw)]
+pDefs :: Parser [(String, Raw, Maybe Raw)]
 pDefs = whiteSpace >> many pDef <* eof
 
-parseRDefs :: String -> Either String [(String, Raw, Raw)]
+parseRDefs :: String -> Either String [(String, Raw, Maybe Raw)]
 parseRDefs = first show . parse pDefs ""

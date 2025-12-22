@@ -24,7 +24,7 @@ import Parser
 
 -- Monad ----------------------------------------------------------------------
 
-data State = State 
+data State = State
     { stREnv  :: REnv,
       stRTys  :: RTys,
       stNames :: [RName] }
@@ -56,13 +56,13 @@ processBlock sourceName state input = do
     defs <- liftError ("Parse Error in " ++ sourceName) (parseRDefs input)
     foldM processDef state defs
 
-processDef :: State -> (String, Raw, Raw) -> Typechecker State
-processDef st (rName, rTy, rV) = do
+processDef :: State -> (String, Raw, Maybe Raw) -> Typechecker State
+processDef st (rName, rty, def) = do
     let name = RName rName
-    
-    (ty, e) <- liftError ("Scope Error [" ++ rName ++ "]") $ runSC (stNames st) ((,) <$> ws @Infer rTy <*> ws @Check rV)
 
-    let ctx = Ctx 
+    ty <- liftError ("Scope Error [" ++ rName ++ "]") $ runSC (stNames st) (ws @Infer rty)
+
+    let ctx = Ctx
             { ctxREnv  = stREnv st,
               ctxRTys  = stRTys st,
               ctxEnv   = [],
@@ -72,21 +72,30 @@ processDef st (rName, rTy, rV) = do
 
     _ <- runTypechecker ctx rName "Annotation" (tc ty)
 
-    let vTy = eval (stREnv st) [] ty
+    let vty = eval (stREnv st) [] ty
 
-    runTypechecker ctx rName "Body" (tc e vTy)
+    case def of
+        Just r -> do
+            e <- liftError ("Scope Error [" ++ rName ++ "]") $ runSC (stNames st) (ws @Check r)
 
-    let v = eval (stREnv st) [] e
+            runTypechecker ctx rName "Body" (tc e vty)
 
-    --let nTy = rb (stREnv st) 0 vTy
-    let n   = rb (stREnv st) 0 v
-    
-    liftIO $ putStrLn $ rName ++ " : " ++ pp [] ty {-nTy-} ++ " ≔ " ++ pp [] n
-    
-    return $ st 
-        { stREnv  = insert name v    (stREnv st),
-          stRTys  = insert name vTy  (stRTys st),
-          stNames = stNames st ++ [name] }
+            let v = eval (stREnv st) [] e
+            
+            let nty = rb (stREnv st) 0 vty
+            let n   = rb (stREnv st) 0 v
+
+            liftIO $ putStrLn $ rName ++ " : " ++ pp [] nty ++ " ≔ " ++ pp [] n
+
+            return $ st
+                { stREnv  = insert name v   (stREnv st),
+                  stRTys  = insert name vty (stRTys st),
+                  stNames = stNames st ++ [name] }
+        Nothing -> do
+            liftIO $ putStrLn $ "postulate: " ++ rName ++ " : " ++ pp [] ty
+            return $ st
+                { stRTys  = insert  name vty (stRTys st),
+                  stNames = stNames st ++ [name] }
 
 liftError :: String -> Either String a -> Typechecker a
 liftError prefix = either (logError . ((prefix ++ ": ") ++)) return
