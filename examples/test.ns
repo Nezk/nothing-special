@@ -1,4 +1,4 @@
-swap : (A B C : U 0) -> (A -> B -> C) -> (B -> A -> C)
+ swap : (A B C : U 0) -> (A -> B -> C) -> (B -> A -> C)
     := \A B C g. \b a. g a b
 
 id : (A : U 0) -> (A -> A)
@@ -46,14 +46,14 @@ trans :
 transRight :
       (A : U 0)
    -> (x y : A)
-   -> (p : x = y @ A) 
+   -> (p : x = y @ A)
    -> trans A x y y p refl = p @ (x = y @ A)
    := \A x y p. refl
 
 transLeft :
       (A : U 0)
    -> (x y : A)
-   -> (p : x = y @ A) 
+   -> (p : x = y @ A)
    -> trans A x x y refl p = p @ (x = y @ A)
    := \A x y e.
       J A x {0} (\y' e'. trans A x x y' refl e' = e' @ (x = y' @ A)) refl y e
@@ -70,11 +70,45 @@ invRight :
 	 y
 	 p
 
-apd : (A : U 0) 
-   -> (P : A -> U 0) 
-   -> (f : (x : A) -> P x) 
-   -> (a b : A) 
-   -> (p : a = b @ A) 
+total : (Base : U 0) -> (F : Base -> U 0) -> U 0
+    := \Base F. (b : Base) * F b
+
+pathLift :
+    (Base : U 0)
+ -> (F : Base -> U 0)
+ -> (x y : Base)
+ -> (u : F x)
+ -> (p : x = y @ Base)
+ -> (x, u) = (y, subst Base F x y p u) @ total Base F
+ := \Base F x y u p.
+    J Base x {0} (\y' p'. (x, u) = (y', subst Base F x y' p' u) @ total Base F)
+      refl
+      y
+      p
+
+substTrans :
+    (A : U 0)
+ -> (P : A -> U 0)
+ -> (x y z : A)
+ -> (p : x = y @ A)
+ -> (q : y = z @ A)
+ -> (u : P x)
+ -> subst A P x z (trans A x y z p q) u
+  = subst A P y z q (subst A P x y p u)
+  @ (P z)
+  := \A P x y z p q u.
+     J A y {0}
+       (\z' q'. subst A P x z' (trans A x y z' p q') u
+              = subst A P y z' q'                    (subst A P x y p u) @ (P z'))
+       refl
+       z
+       q
+
+apd : (A : U 0)
+   -> (P : A -> U 0)
+   -> (f : (x : A) -> P x)
+   -> (a b : A)
+   -> (p : a = b @ A)
    -> subst A P a b p (f a) = f b @ (P b)
    := \A P f a b p.
       J A a {0} (\b' p'. subst A P a b' p' (f a) = f b' @ (P b'))
@@ -94,7 +128,7 @@ htpy : (A B : U 0) -> (f g : A -> B) -> U 0
 -}
 htpyNatural :
     (A B : U 0)
- -> (f g : A -> B) 
+ -> (f g : A -> B)
  -> (H : htpy A B f g)
  -> (x y : A)
  -> (p : x = y @ A)
@@ -132,7 +166,20 @@ idtoeqv :
       (idQinv A)
       B
       e
-      
+
+concatEquiv :
+    (A : U 0)
+ -> (x y z : A)
+ -> (p : x = y @ A)
+ -> qinv (y = z @ A) (x = z @ A) (trans A x y z p)
+ := \A x y z p.
+    J A x {0} (\y' p'. qinv (y' = z @ A) (x = z @ A) (trans A x y' z p'))
+      (\e. e,
+       \h. transLeft A x z h,
+       \h. transLeft A x z h)
+      y
+      p
+
 ------------------------------------------------------------
 
 apS :
@@ -221,14 +268,14 @@ indProd
 
 pairEq :
     (A B : U 0)
- -> (p q : A * B)
- -> p.1 = q.1 @ A
- -> p.2 = q.2 @ B
- -> p = q @ (A * B)
-    := \A B p q e e'.
-         let hyp  := subst A (\x. p = (x, p.2) @ (A * B)) p.1 q.1 e  refl in
-         let hyp' := subst B (\x. p = (q.1, x) @ (A * B)) p.2 q.2 e' hyp  in
-         subst (A * B) (\x. p = x @ (A * B)) (q.1, q.2) q refl hyp'
+ -> (u u' : A)
+ -> (v v' : B)
+ -> (p : u = u' @ A)
+ -> (q : v = v' @ B)
+ -> (u, v) = (u', v') @ (A * B)
+ := \A B u u' v v' p q.
+     subst A (\x. (u, v) = (x, v') @ (A * B)) u u' p
+    (subst B (\x. (u, v) = (u, x)  @ (A * B)) v v' q refl)
 
 ac :
     (A B : U 0)
