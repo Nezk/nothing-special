@@ -153,8 +153,10 @@ reportHole n t ty = ask >>= \ctx -> do
 
     extra <- maybe (pure "") reportAnn t -- TODO: something better than this?
 
-    tell ["\nHole: ?" ++ unHName n ++ "\n\nContext:\n\n" ++ unlines (map ("  " ++) (reverse ctxEntries)) ++ extra ++
-         "\nGoal: "  ++ P.pp ctx.ctxNames normGoal ++ "\n"]
+    let context = if null ctxEntries then "" else "\nContext:\n\n" ++ unlines (map ("  " ++) (reverse ctxEntries))
+
+    tell ["\nHole: ?" ++ unHName n ++ "\n" ++ context ++ extra ++
+          "\nGoal: "  ++ P.pp ctx.ctxNames normGoal   ++ "\n"]
   where reportAnn t' = catchError
           (do ty'     <- tc @Infer t'
               norm    <- force ty' >>= \v -> asks \c -> rb c.ctxREnv c.ctxLv v
