@@ -103,7 +103,8 @@ pHole = do
         n <- identifier
         notFollowedBy (reservedOp ":")
         return n
-    return $ RHole name
+    term <- optionMaybe $ braces pTerm
+    return $ RHole name term
 
 pVar :: Parser Raw
 pVar = try $ do

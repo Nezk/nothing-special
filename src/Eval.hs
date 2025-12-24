@@ -45,13 +45,13 @@ evalS renv env = \case
 
 evalH :: REnv -> Env -> Head Syn m s arg -> Res s arg
 evalH renv env = \case
-    Var ix        -> env !! unIx ix
-    Hole h        -> Use $ Head $ Hole h
-    Ref r         -> Use $ Head $ Ref r -- lazy
+    Var  i        -> env !! unIx i
+    Hole h t      -> Use $ Head $ Hole h $ eval renv env <$> t
+    Ref  r        -> Use $ Head $ Ref r -- lazy
     Fst           -> Head Fst
     Snd           -> Head Snd
     Contra        -> Head Contra
-    Ind u p z s   -> Head $ Ind u (eval renv env p) (eval renv env z)   (eval renv env s)
+    Ind   u p z s -> Head $ Ind u (eval renv env p) (eval renv env z)   (eval renv env s)
     J a x u p q y -> Head $ J     (eval renv env a) (eval renv env x) u (eval renv env p)
                                   (eval renv env q) (eval renv env y)
 

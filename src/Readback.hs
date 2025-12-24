@@ -36,8 +36,8 @@ rbS renv lv = \case
 
 rbH :: REnv -> Lv -> Head Sem None s arg -> Head Nrm None s arg
 rbH renv lv = \case
-    Var  x           -> Var (lvl2ix lv x)
-    Hole n           -> Hole n
+    Var  l           -> Var   (lvl2ix lv l)
+    Hole n t         -> Hole n $ rb renv lv <$> t
     Ref  r           -> Ref r    
     Ind  u a b c     -> Ind u (rb renv lv a) (rb renv lv b)   (rb renv lv c)
     J    a p u x d y -> J     (rb renv lv a) (rb renv lv p) u (rb renv lv x) (rb renv lv d) (rb renv lv y)

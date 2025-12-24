@@ -77,9 +77,9 @@ type family LetDef (m :: Mode) where
     LetDef Check = (Chk Syn, Inf Syn)
 
 data Head (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
-    Var  :: Valid p m => V p   -> Head p m           Rigid Check
-    Hole :: HName              -> Head p (T p Check) Rigid Check
-    Ref  :: Valid p m => RName -> Head p m           Rigid Check
+    Var  :: Valid p m => V p           -> Head p m           Rigid Check
+    Hole :: HName     -> Maybe (Inf p) -> Head p (T p Check) Rigid Check
+    Ref  :: Valid p m => RName         -> Head p m           Rigid Check
 
     Ind :: Valid p m => Ul    -> Chk p -> Chk p -> Chk p                   -> Head p m Flex Check
     J   :: Valid p m => Inf p -> Chk p -> Ul    -> Chk p -> Chk p -> Chk p -> Head p m Flex Check
@@ -160,4 +160,4 @@ data Raw
   | RContra                   Raw
   | RInd   Int                Raw Raw Raw Raw
   | RJ                        Raw Raw Int Raw Raw Raw Raw
-  | RHole  String
+  | RHole  String (Maybe Raw)

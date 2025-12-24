@@ -84,8 +84,10 @@ ws raw = case raw of
         SCheck -> pure Refl
         _      -> wsErr
 
-    RHole n -> case mode @m of 
-        SCheck -> pure $ Use (Head (Hole (HName n)))
+    RHole n t -> case mode @m of 
+        SCheck -> do
+            t' <- traverse (ws @Infer) t
+            pure $ Use (Head (Hole (HName n) t'))
         _      -> wsErr
     
     where wsErr               = lift . Left $ "Cannot infer expression: " ++ ppRaw raw

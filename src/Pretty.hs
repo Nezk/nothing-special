@@ -82,7 +82,7 @@ ppS p ctx = \case
 ppH :: forall p m s arg. PPPhase p => LNames -> Head p m s arg -> String
 ppH ctx = \case
     Var i              -> ppVar @p ctx i
-    Hole h             -> "?" ++ unHName h
+    Hole h t           -> "?" ++ unHName h ++ maybe "" (\t' -> "{" ++ pp' 4 ctx t' ++ "}") t
     Ref r              -> unRName r    
     Contra             -> "contra"
     Ind   (Ul k) p z s -> unwords ["ind",                           "{" ++ show k ++ "}", pp' 4 ctx p, pp' 4 ctx z, pp' 4 ctx s]
@@ -122,7 +122,7 @@ ppRaw' p = \case
     RSnd     t          -> ppRaw' 4 t ++ ".2"
     REql     t a b      -> parens (p > 1) $ unwords [ppRaw' 2 a, "=", ppRaw' 2 b, "@", ppRaw' 3 t]
     RRefl               -> "refl"
-    RHole    n          -> "?" ++ n
+    RHole    n t        -> "?" ++ n ++ maybe "" (\t' -> "{" ++ ppRaw' 0 t' ++ "}") t
     RContra  t          -> parens (p > 3) $ "contra " ++ ppRaw' 4 t
     RInd     k p' z s n -> parens (p > 3) $ unwords [ "ind", "{" ++ show k ++ "}", ppRaw' 4 p', ppRaw' 4 z, ppRaw' 4 s, ppRaw' 4 n ]
     RJ   a x k p' q y e -> parens (p > 3) $ unwords [ "J", ppRaw' 4 a, ppRaw' 4 x, "{" ++ show k ++ "}", ppRaw' 4 p', ppRaw' 4 q, ppRaw' 4 y, ppRaw' 4 e ]

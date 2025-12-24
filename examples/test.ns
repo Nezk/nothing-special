@@ -186,7 +186,8 @@ apS :
      (n k : Nat)
   -> n = k @ Nat
   -> (S n) = (S k) @ Nat
-  := \n k e. ap Nat Nat n k (\x. S x) e
+  := \n k e.
+     ap Nat Nat n k (\x. S x) e
 
 recNat :
      (C : U 0)
@@ -200,7 +201,8 @@ recNat1 :
   -> C
   -> (Nat -> C -> C)
   -> (Nat -> C)
-  := \C fz fs n. ind {1} (\_. C) fz fs n
+  := \C fz fs n.
+     ind {1} (\_. C) fz fs n
 
 double : Nat -> Nat
     := recNat Nat Z (\_ prev. S (S prev))
@@ -245,9 +247,10 @@ ack : Nat -> Nat -> Nat
     := \n.
        recNat (Nat -> Nat)
        	      (\m. S m)
-	      (\n' ackn'. recNat Nat
-	      	   	 	(ackn' (S Z))
-				(\m' acn'm'. ackn' acn'm'))
+	      (\n' ackn'.
+	        recNat Nat
+	      	       (ackn' (S Z))
+		       (\m' acn'm'. ackn' acn'm'))
 	      n
 
 
@@ -276,6 +279,29 @@ pairEq :
  := \A B u u' v v' p q.
      subst A (\x. (u, v) = (x, v') @ (A * B)) u u' p
     (subst B (\x. (u, v) = (u, x)  @ (A * B)) v v' q refl)
+
+sigmaPath :
+    (A : U 0)
+ -> (P : A -> U 0)
+ -> (u u' : A)
+ -> (v : P u)
+ -> (v' : P u')
+ -> (p : u = u' @ A)
+ -> (q : subst A P u u' p v = v' @ (P u'))
+ -> (u, v) = (u', v') @ ((x : A) * P x)
+ := \A P u u' v v' p q.
+    J A u {0} (\w p'. (y  : P w)
+                   -> (q' : subst A P u w p' v = y @ (P w))
+		   -> (u, v) = (w, y) @ ((x : A) * P x))
+      (\y q'. subst (P u) (\i. (u, v) = (u, i) @ ((x : A) * P x))
+              v
+	      y
+	      q'
+	      refl) 
+      u'
+      p
+      v'
+      q
 
 ac :
     (A B : U 0)

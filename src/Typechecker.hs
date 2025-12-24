@@ -23,6 +23,7 @@ import GHC.TypeLits (TypeError, ErrorMessage(..))
 
 import Data.Kind       (Constraint)
 import Data.Map.Strict ((!))
+import Data.Either     (isRight)
 
 import Syntax
 import Eval
@@ -132,7 +133,7 @@ convS s s' = catchError match delta
 convH :: Head Sem None s a -> Head Sem None s' a' -> TC ()
 convH h h' = case (h, h') of
     (Var i,         Var j)               | i == j  -> pure ()
-    (Hole n,        Hole m)              | n == m  -> pure ()
+    (Hole n _,      Hole m _)            | n == m  -> pure ()
     (Ref n,         Ref m)               | n == m  -> pure ()
     (Fst,           Fst)                           -> pure ()
     (Snd,           Snd)                           -> pure ()
@@ -143,14 +144,24 @@ convH h h' = case (h, h') of
 
 -- Typechecking ---------------------------------------------------------------
 
-reportHole :: HName -> Vl -> TC ()
-reportHole n ty = ask >>= \ctx ->
+reportHole :: HName -> Maybe (Inf Syn) -> Vl -> TC ()
+reportHole n t ty = ask >>= \ctx -> do
     let normGoal      = rb ctx.ctxREnv ctx.ctxLv ty
         ppEntry ty' i = unLName (ctx.ctxNames !! i) ++ " : " ++ P.pp ctx.ctxNames ty'
         normTys       = map (rb ctx.ctxREnv ctx.ctxLv) ctx.ctxTys
         ctxEntries    = zipWith ppEntry normTys [0..]
-    in tell ["\nHole: ?" ++ unHName n ++ "\n\nContext:\n\n" ++ unlines (map ("  " ++) (reverse ctxEntries)) ++
-             "\nGoal: "  ++ P.pp ctx.ctxNames normGoal ++ "\n"]
+
+    extra <- maybe (pure "") reportAnn t -- TODO: something better than this?
+
+    tell ["\nHole: ?" ++ unHName n ++ "\n\nContext:\n\n" ++ unlines (map ("  " ++) (reverse ctxEntries)) ++ extra ++
+         "\nGoal: "  ++ P.pp ctx.ctxNames normGoal ++ "\n"]
+  where reportAnn t' = catchError
+          (do ty'     <- tc @Infer t'
+              norm    <- force ty' >>= \v -> asks \c -> rb c.ctxREnv c.ctxLv v
+              matches <- isRight <$> tryError (conv ty' ty) -- TODO: print the error instead of converting it to bool?
+              names   <- asks ctxNames 
+              pure $ "\nType: " ++ P.pp names norm ++ if matches then " [Matches Goal]" else " [Type Mismatch]")
+          (pure . ("\nError: " ++))
 
 isType :: Inf Syn -> TC Ul
 isType e = do
@@ -265,9 +276,9 @@ tcS = \case
 
 tcH :: forall m m'. (Valid Syn m', Flow m' m, Typing m) => Head Syn m' Rigid Check -> TcTy m
 tcH = \case
-    Var i  -> inst @m $ asks    \c -> c.ctxTys !! unIx i
-    Ref r  -> inst @m $ ask >>= \c -> pure $ c.ctxRTys ! r
-    Hole h -> case mode @m of SCheck -> reportHole h
+    Var i     -> inst @m $ asks    \c -> c.ctxTys !! unIx i
+    Ref r     -> inst @m $ ask >>= \c -> pure $ c.ctxRTys ! r
+    Hole h t  -> case mode @m of SCheck -> reportHole h t
 
 tcFlex :: Valid Syn m => Spine Syn m Flex Check -> TC Vl
 tcFlex (Head h) = case h of
