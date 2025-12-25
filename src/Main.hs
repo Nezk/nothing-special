@@ -58,7 +58,7 @@ processBlock src = orErr src . parseRDefs >=> traverse_ processDef
 
 processDef :: (String, Raw, Maybe Raw) -> Typechecker ()
 processDef (name, rty, def) = do
-    vty <-                 typecheck name "Annotation" rty (ws @Infer) ( tc @Infer)
+    vty <-                 typecheck name "Annotation" rty (ws @Infer)   tc
     v   <- traverse (\d -> typecheck name "Body"       d   (ws @Check) (`tc` vty)) def
     register name vty v
 
