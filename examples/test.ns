@@ -163,7 +163,7 @@ idtoeqv :
  := \A B e.
     J (U 0) A {0}
       (\B' p. qinv A B' (substU (\X'. A -> X') A B' p (id A)))
-      (idQinv A)
+      ?{(idQinv A)}
       B
       e
 
@@ -284,7 +284,7 @@ sigmaPath :
     (A : U 0)
  -> (P : A -> U 0)
  -> (u u' : A)
- -> (v : P u)
+ -> (v  : P u)
  -> (v' : P u')
  -> (p : u = u' @ A)
  -> (q : subst A P u u' p v = v' @ (P u'))
@@ -297,11 +297,13 @@ sigmaPath :
               v
 	      y
 	      q'
-	      refl) 
+	      refl)
       u'
       p
       v'
       q
+
+
 
 ac :
     (A B : U 0)

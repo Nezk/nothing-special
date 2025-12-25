@@ -45,13 +45,13 @@ data Ctx =
 
         ctxLv :: Lv }
 
-type Log = [String]
+type Report = [String]
 
 newtype TC a
-    = TC { unTC :: ReaderT Ctx (ExceptT String (Writer Log)) a }
-    deriving (Functor, Applicative, Monad, MonadError String, MonadWriter Log, MonadReader Ctx)
+    = TC { unTC :: ReaderT Ctx (ExceptT String (Writer Report)) a }
+    deriving (Functor, Applicative, Monad, MonadError String, MonadWriter Report, MonadReader Ctx)
 
-runTC :: Ctx -> TC a -> (Either String a, Log)
+runTC :: Ctx -> TC a -> (Either String a, Report)
 runTC ctx = runWriter . runExceptT . flip runReaderT ctx . unTC
 
 withBind :: LName -> Vl -> TC a -> TC a

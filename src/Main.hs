@@ -3,13 +3,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
-import Control.Monad          (foldM, void)
+import Control.Monad          ((>=>))
 import Control.Monad.Except   (ExceptT, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.State    (StateT, execStateT, get, modify)
 
+import Data.Foldable   (traverse_)
+import Data.Functor    ((<&>))
 import Data.Map.Strict (empty, insert)
 
 import System.Environment (getArgs)
@@ -24,85 +29,75 @@ import Parser
 
 -- Monad ----------------------------------------------------------------------
 
+type Holes  = [String]
+type Output = [String]
+
 data State = State
-    { stREnv  :: REnv,
-      stRTys  :: RTys,
-      stNames :: [RName] }
+    { stREnv   :: REnv,
+      stRTys   :: RTys,
+      stNames  :: [RName],
+      stReport :: Either Holes Output }
 
-type Typechecker = ExceptT () IO
-
-emptyState :: State
-emptyState = State empty empty []
+type Typechecker = StateT State (ExceptT () IO)
 
 -- Execution ------------------------------------------------------------------
 
 main :: IO ()
 main = getArgs >>= \case
     []    -> putStrLn "Usage: ns <file_0> <file_1> ... <file_n>"
-    files -> void $ runExceptT $ foldM processFile emptyState files
+    files -> runExceptT (execStateT (traverse_ processFile files) emptySt) >>=
+             either (const $ pure ())
+                    (putStr . unlines . either id id . stReport)
+    where emptySt = State empty empty [] (Right [])
 
--- For debugging in REPL
-checkDefs :: String -> IO ()
-checkDefs = void . runExceptT . processBlock "GHCi" emptyState
+processFile :: FilePath -> Typechecker ()
+processFile path = do
+    modify \st -> st { stReport = (++ ["--- Typechecking " ++ path ++ " ---"]) <$> (stReport st) }
+    liftIO (readFile path) >>= processBlock path
 
-processFile :: State -> FilePath -> Typechecker State
-processFile state path = do
-    liftIO $ putStrLn $ "--- Typecheckering " ++ path ++ " ---" -- I don't want to add the transformers library to cabal project. That's why it's liftIO.
-    content <- liftIO $ readFile path 
-    processBlock path state content
+processBlock :: String -> String -> Typechecker ()
+processBlock src = orErr src . parseRDefs >=> traverse_ processDef
 
-processBlock :: String -> State -> String -> Typechecker State
-processBlock sourceName state input = do
-    defs <- liftError ("Parse Error in " ++ sourceName) (parseRDefs input)
-    foldM processDef state defs
+processDef :: (String, Raw, Maybe Raw) -> Typechecker ()
+processDef (name, rty, def) = do
+    vty <-                 typecheck @Infer name "Annotation" rty tc
+    v   <- traverse (\d -> typecheck @Check name "Body"       d   (`tc` vty)) def
+    register name vty v
 
-processDef :: State -> (String, Raw, Maybe Raw) -> Typechecker State
-processDef st (rName, rty, def) = do
-    let name = RName rName
+orErr :: String -> Either String a -> Typechecker a
+orErr prefix = either ((>> throwError ()) . liftIO . putStrLn . ((prefix ++ ": ") ++)) pure
 
-    ty <- liftError ("Scope Error [" ++ rName ++ "]") $ runSC (stNames st) (ws @Infer rty)
+typecheck :: forall m a. (HasMode m, Valid Syn m) => String -> String -> Raw -> (Sy m -> TC a) -> Typechecker Vl
+typecheck name stage raw check = do
+    st <- get
+    t  <- orErr ("Scope Error [" ++ name ++ "]") (runSC (stNames st) (ws @m raw))
+    
+    let ctx          =  Ctx (stREnv st) (stRTys st) [] [] [] 0
+    let (res, holes) =  runTC ctx (check t)
+    _                <- orErr ("Type Error (" ++ stage ++ ") [" ++ name ++ "]") res
+    
+    -- isn't evaluated if stReport st' is Left due to lazyness
+    let newHoles = (("\n[" ++ name ++ "]\n") ++) <$> holes
+    
+    modify \st' -> st' { stReport = either (Left . (++ newHoles)) 
+                                           (if null newHoles then Right else const (Left newHoles)) 
+                                           (stReport st') }
+    
+    pure (eval (stREnv st) [] t)
 
-    let ctx = Ctx
-            { ctxREnv  = stREnv st,
-              ctxRTys  = stRTys st,
-              ctxEnv   = [],
-              ctxTys   = [],
-              ctxNames = [],
-              ctxLv    = 0 }
-
-    _ <- runTypechecker ctx rName "Annotation" (tc ty)
-
-    let vty = eval (stREnv st) [] ty
-
-    case def of
-        Just r -> do
-            e <- liftError ("Scope Error [" ++ rName ++ "]") $ runSC (stNames st) (ws @Check r)
-
-            runTypechecker ctx rName "Body" (tc e vty)
-
-            let v = eval (stREnv st) [] e
-            
-            let nty = rb (stREnv st) 0 vty
-            let n   = rb (stREnv st) 0 v
-
-            liftIO $ putStrLn $ rName ++ " : " ++ pp [] nty ++ " ≔ " ++ pp [] n
-
-            return $ st
-                { stREnv  = insert name v   (stREnv st),
-                  stRTys  = insert name vty (stRTys st),
-                  stNames = stNames st ++ [name] }
-        Nothing -> do
-            liftIO $ putStrLn $ "postulate: " ++ rName ++ " : " ++ pp [] ty
-            return $ st
-                { stRTys  = insert  name vty (stRTys st),
-                  stNames = stNames st ++ [name] }
-
-liftError :: String -> Either String a -> Typechecker a
-liftError prefix = either (logError . ((prefix ++ ": ") ++)) return
-    where logError = (>> throwError ()) . liftIO . putStrLn
-
-runTypechecker :: Ctx -> String -> String -> TC a -> Typechecker a
-runTypechecker ctx name stage action = do
-    let (res, logs) = runTC ctx action
-    liftIO $ mapM_ putStrLn logs
-    liftError ("Type Error (" ++ stage ++ ") [" ++ name ++ "]") res
+register :: String -> Vl -> Maybe Vl -> Typechecker ()
+register name vty body = 
+    modify \st ->
+        let rname = RName name
+            renv  = stREnv st
+            renv' = (maybe id (insert rname) body) renv
+            rtys' = insert rname vty (stRTys st)
+            ppv   = pp [] . rb renv 0            
+            ppty  = ppv vty
+            out   = maybe ("postulate: " ++ name ++ " : " ++ ppty)
+                          (((               name ++ " : " ++ ppty ++ " ≔ ") ++) . ppv)
+                          body
+        in State { stREnv   = renv',
+                   stRTys   = rtys',
+                   stNames  = stNames  st ++ [rname],
+                   stReport = stReport st <&> \outs -> outs ++ [out] }
