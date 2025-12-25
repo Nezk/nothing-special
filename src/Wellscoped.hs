@@ -8,7 +8,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Wellscoped where
+module Wellscoped (SC, runSC, ws) where
 
 import Control.Monad.Reader
 import Control.Applicative ((<|>))

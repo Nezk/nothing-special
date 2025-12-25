@@ -12,7 +12,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Typechecker where
+module Typechecker (tc, runTC, TC, Ctx(..)) where
 
 import Control.Monad.Except
 import Control.Monad.Writer.Strict

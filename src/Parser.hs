@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Parser (parseRDefs, runSC) where
+module Parser (parseRDefs) where
 
 import Control.Monad (void)
 
@@ -14,7 +14,6 @@ import Text.Parsec.Language (emptyDef)
 import qualified Text.Parsec.Token as T
 
 import Syntax
-import Wellscoped
 
 -- todo: rewrite the parser
 

@@ -3,8 +3,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
@@ -23,9 +21,9 @@ import Syntax
 import Eval
 import Pretty
 import Readback
-import Typechecker
-import Wellscoped
-import Parser
+import Typechecker 
+import Wellscoped  
+import Parser     
 
 -- Monad ----------------------------------------------------------------------
 
@@ -52,7 +50,7 @@ main = getArgs >>= \case
 
 processFile :: FilePath -> Typechecker ()
 processFile path = do
-    modify \st -> st { stReport = (++ ["--- Typechecking " ++ path ++ " ---"]) <$> (stReport st) }
+    modify \st -> st { stReport = (++ ["--- Typechecking " ++ path ++ " ---"]) <$> stReport st }
     liftIO (readFile path) >>= processBlock path
 
 processBlock :: String -> String -> Typechecker ()
@@ -60,17 +58,17 @@ processBlock src = orErr src . parseRDefs >=> traverse_ processDef
 
 processDef :: (String, Raw, Maybe Raw) -> Typechecker ()
 processDef (name, rty, def) = do
-    vty <-                 typecheck @Infer name "Annotation" rty tc
-    v   <- traverse (\d -> typecheck @Check name "Body"       d   (`tc` vty)) def
+    vty <-                 typecheck name "Annotation" rty (ws @Infer) ( tc @Infer)
+    v   <- traverse (\d -> typecheck name "Body"       d   (ws @Check) (`tc` vty)) def
     register name vty v
 
 orErr :: String -> Either String a -> Typechecker a
 orErr prefix = either ((>> throwError ()) . liftIO . putStrLn . ((prefix ++ ": ") ++)) pure
 
-typecheck :: forall m a. (HasMode m, Valid Syn m) => String -> String -> Raw -> (Sy m -> TC a) -> Typechecker Vl
-typecheck name stage raw check = do
+typecheck :: String -> String -> Raw -> (Raw -> SC (Sy m)) -> (Sy m -> TC a) -> Typechecker Vl
+typecheck name stage raw scope check = do
     st <- get
-    t  <- orErr ("Scope Error [" ++ name ++ "]") (runSC (stNames st) (ws @m raw))
+    t  <- orErr ("Scope Error [" ++ name ++ "]") (runSC (stNames st) (scope raw))
     
     let ctx          =  Ctx (stREnv st) (stRTys st) [] [] [] 0
     let (res, holes) =  runTC ctx (check t)
