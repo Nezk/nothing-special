@@ -29,7 +29,7 @@ langDef = emptyDef
       T.identStart      = letter <|> char '_',
       T.identLetter     = alphaNum <|> char '_' <|> char '\'',
       T.opStart         = oneOf ":!#$%&*+./<=>?@\\^|-~→λ×ℕ≔",
-      T.opLetter        = oneOf ":!#$%&*+./<=>?@\\^|-~→λ×ℕ≔",
+      T.opLetter        = oneOf ":!#$%&*+/<=>?@\\^|-~→λ×ℕ≔",
       T.reservedOpNames = [ "->", "→", ":=", "≔", "\\", "λ", ".", ",",
                             "*", "×", ":", "=", "@", ".1", ".2", "?" ],
       T.reservedNames   = [ "let", "in", "U", "Nat", "ℕ", "Z", "S",
