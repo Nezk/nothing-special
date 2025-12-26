@@ -106,11 +106,13 @@ conv u v = case (u, v) of
     (Use s,     _)            -> tryUnfold s v
     (_,         Use s)        -> tryUnfold s u
     _                         -> mismatch "Mismatch" P.pp u P.pp v
-  where convGen   f          f'           = asks ctxLv   >>= \l    -> local (\c -> c { ctxLv = l + 1 })    $  join (liftA2 conv (f (var l)) (f' (var l)))
-        convProj  p          p'           = asks ctxREnv >>= \renv -> conv  (doFst renv p) (doFst renv p') >> conv (doSnd renv p) (doSnd renv p')
+  where convProj  p          p'           = asks ctxREnv >>= \renv -> conv  (doFst renv p) (doFst renv p') >> conv (doSnd renv p) (doSnd renv p')
         convBind  (Cl env b) (Cl env' b') = convGen (\a -> asks \c -> eval c.ctxREnv (a : env) b) (\a -> asks \c -> eval c.ctxREnv (a : env') b')
         convEta   (Cl env b) f            = convGen (\a -> asks \c -> eval c.ctxREnv (a : env) b) (\a -> asks \c -> app  c.ctxREnv f a)
         tryUnfold s          x            = expand s (`conv` x) (mismatch "Mismatch" (P.ppS 0) s P.pp x)
+        convGen   f          f'           = asks ctxLv >>= \l ->
+            local (\c -> c { ctxLv = c.ctxLv + 1, ctxNames = P.fresh "x" c.ctxNames : c.ctxNames }) $
+            join (liftA2 conv (f (var l)) (f' (var l)))        
 
 convS :: Spine Sem None s arg -> Spine Sem None s' arg' -> TC ()
 convS s s' = catchError match delta

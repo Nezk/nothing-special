@@ -1,4 +1,4 @@
- swap : (A B C : U 0) -> (A -> B -> C) -> (B -> A -> C)
+swap : (A B C : U 0) -> (A -> B -> C) -> (B -> A -> C)
     := \A B C g. \b a. g a b
 
 id : (A : U 0) -> (A -> A)
@@ -22,8 +22,20 @@ substU :
  := \P A B e x.
     J (U 0) A {0} (\X _. P X) x B e
 
+substU1 :
+    (P : U 0 -> U 1)
+ -> (A B : U 0)
+ -> A = B @ U 0
+ -> P A
+ -> P B
+ := \P A B e x.
+    J (U 0) A {1} (\X _. P X) x B e
+
 sym : (A : U 0) -> (a b : A) -> a = b @ A -> b = a @ A
    := \A a b e. subst A (\x. x = a @ A) a b e refl
+
+symU : (A B : U 0) -> A = B @ (U 0) -> B = A @ (U 0)
+   := \A B e. substU1 (\X. X = A @ (U 0)) A B e refl
 
 ap :
       (A B : U 0)
@@ -163,7 +175,7 @@ idtoeqv :
  := \A B e.
     J (U 0) A {0}
       (\B' p. qinv A B' (substU (\X'. A -> X') A B' p (id A)))
-      ?{(idQinv A)}
+      (idQinv A)
       B
       e
 
@@ -179,6 +191,58 @@ concatEquiv :
        \h. transLeft A x z h)
       y
       p
+
+happly :
+    (A B : U 0) 
+ -> (f g : A -> B) 
+ -> (p : f = g @ (A -> B)) 
+ -> htpy A B f g 
+ := \A B f g p x. 
+    ap (A -> B) B f g (\h. h x) p
+
+funExt :
+    (A B : U 0) 
+ -> (f g : A -> B) 
+ -> htpy A B f g
+ -> f = g @ (A -> B)
+
+substDom :
+    (X Y : U 0)
+ -> (B : U 0)
+ -> (e : X = Y @ (U 0))
+ -> (f : X -> B)
+ -> substU (\T. T -> B) X Y e f
+  = (\y. f (substU (\T. T) Y X (symU X Y e) y))
+  @ (Y -> B)
+ := \X Y B e f.
+    J (U 0) X {0}
+      (\Y' e'. substU (\T. T -> B) X Y' e' f
+             = (\y. f (substU (\T. T) Y' X (symU X Y' e') y))
+	     @ (Y' -> B))
+      refl
+      Y
+      e
+
+linv : (A B : U 0) -> (A -> B) -> U 0
+    := \A B f. (g : B -> A) * htpy A A (comp A B A g f) (id A)
+
+rinv : (A B : U 0) -> (A -> B) -> U 0
+    := \A B f. (h : B -> A) * htpy B B (comp B A B f h) (id B)
+
+-- g ~ g . (f . h) ~ (g . f) . h ~ h
+-- therefore, contractible
+equiv : (A B : U 0) -> (A -> B) -> U 0
+    := \A B f. linv A B f * rinv A B f
+
+qinvEquiv :
+    (A B : U 0)
+ -> (f : A -> B)
+ -> qinv  A B f
+ -> equiv A B f
+ := \A B f q.
+    ((q.1, (q.2).1), -- todo
+     (q.1, (q.2).2))
+     
 
 ------------------------------------------------------------
 
@@ -253,7 +317,6 @@ ack : Nat -> Nat -> Nat
 		       (\m' acn'm'. ackn' acn'm'))
 	      n
 
-
 ------------------------------------------------------------
 
 recProd : (A B C : U 0) -> (A -> B -> C) -> (A * B) -> C
@@ -303,7 +366,31 @@ sigmaPath :
       v'
       q
 
+pathFst :
+    (A : U 0)
+ -> (P : A -> U 0) 
+ -> (u u' : A)
+ -> (v  : P u)
+ -> (v' : P u')
+ -> (r : (u, v) = (u', v') @ ((x : A) * P x))
+ -> u = u' @ A
+ := \A P u u' v v' r.
+    ap ((x : A) * P x) A (u, v) (u', v') (\p. p.1) r
 
+pathSnd :
+    (A : U 0)
+ -> (P : A -> U 0) 
+ -> (u u' : A)
+ -> (v  : P u)
+ -> (v' : P u')
+ -> (r : (u, v) = (u', v') @ ((x : A) * P x))
+ -> subst A P u u' (pathFst A P u u' v v' r) v = v' @ (P u')
+ := \A P u u' v v' r.
+    J ((x : A) * P x) (u, v) {0}
+      (\p r'. subst A P u p.1 (pathFst A P u p.1 v p.2 r') v = p.2 @ P p.1)
+      refl
+      (u', v')
+      r
 
 ac :
     (A B : U 0)
@@ -426,6 +513,133 @@ coprodInd :
   -> ((x : Coprod A B) -> P x)
   := \A B P l r x.
      boolInd (\b. (v : ifU A B b) -> P (b, v)) l r x.1 x.2
+
+coprodRec :
+    (A B C : U 0)
+ -> (A -> C)
+ -> (B -> C)
+ -> Coprod A B
+ -> C
+ := \A B C.
+    coprodInd A B (\_. C)
+
+coprodInd1 :
+     (A B : U 0)
+  -> (P : Coprod A B -> U 1) 
+  -> ((a : A) -> P (inl A B a))
+  -> ((b : B) -> P (inr A B b))
+  -> ((x : Coprod A B) -> P x)
+  := \A B P l r x.
+     boolInd1 (\b. (v : ifU A B b) -> P (b, v)) l r x.1 x.2
+
+coprodRec1 :
+    (A B : U 0)
+ -> (C : U 1)
+ -> (A -> C)
+ -> (B -> C)
+ -> Coprod A B
+ -> C
+ := \A B C.
+    coprodInd1 A B (\_. C)
+
+Code : (A B : U 0) -> Coprod A B -> Coprod A B -> U 0
+   := \A B.
+      coprodRec1 A B (Coprod A B -> (U 0))
+        (\inl. coprodRec1 A B (U 0)
+	         (\inl'. inl = inl' @ A)
+		 (\_.    Void))
+	(\inr. coprodRec1 A B (U 0)
+	         (\_.    Void)
+		 (\inr'. inr = inr' @ B))
+
+codeRefl :
+    (A B : U 0)
+ -> (c : Coprod A B)
+ -> Code A B c c
+ := \A B.
+    coprodInd A B
+    (\k. Code A B k k)
+    (\_. refl)
+    (\_. refl)
+
+encode :
+    (A B : U 0)
+ -> (x y : Coprod A B)
+ -> x = y @ Coprod A B
+ -> Code A B x y
+ := \A B x y e.
+    subst (Coprod A B) (Code A B x) x y e (codeRefl A B x)
+
+decode :
+    (A B : U 0)
+ -> (x y : Coprod A B)
+ -> Code A B x y
+ -> x = y @ Coprod A B
+ := \A B.
+    coprodInd A B
+       (\x. (y : Coprod A B) -> Code A B x y -> x = y @ Coprod A B)
+       (\a. coprodInd A B (\y. Code A B (inl A B a) y -> inl A B a = y @ Coprod A B)
+                          (\a' h. ap A (Coprod A B) a a' (inl A B) h)
+	                  (\b' h. contra h))
+       (\b. coprodInd A B (\x. Code A B (inr A B b) x -> inr A B b = x @ Coprod A B)
+       	                  (\a' h. contra h)
+                          (\b' h. ap B (Coprod A B) b b' (inr A B) h))
+
+disjoint :
+    (A B : U 0)
+ -> (a : A)
+ -> (b : B)
+ -> inl A B a = inr A B b @ Coprod A B
+ -> Void
+ := \A B a b. encode A B (inl A B a) (inr A B b)
+
+CodeNat : Nat -> Nat -> U 0
+   := recNat1 (Nat -> U 0)
+	   -- n = 0
+	      (recNat1 (U 0)
+		       Unit   -- 0 = 0
+		(\_ _. Void)) -- 0 = S _
+	   -- n = S n'
+	      (\n' CodeNatn'.
+	 recNat1 (U 0)
+		 Void			-- S n' = 0
+		 (\m' _. CodeNatn' m')) -- S n' = S m' -> n' = m'
+
+codeNatRefl : (n : Nat) -> CodeNat n n
+  := \n. ind {0} (\n. CodeNat n n) star (\n' CodeNatn'. CodeNatn') n
+
+encodeNat :
+    (n m : Nat)
+ -> n = m @ Nat
+ -> CodeNat n m
+ := \n m e.
+    subst Nat (CodeNat n) n m e (codeNatRefl n)
+
+decodeNat :
+    (n m : Nat)
+ -> CodeNat n m
+ -> n = m @ Nat
+ := \n.
+    ind {0} (\n'. (m : Nat) -> CodeNat n' m -> n' = m @ Nat)
+        (\m. ind {0} (\m'. CodeNat Z m' -> Z = m' @ Nat) (\_. refl) (\_ _ h. contra h) m)
+	(\n' decodeNatn' m.
+	  ind {0} (\m'. CodeNat (S n') m' -> (S n') = m' @ Nat)
+	      (\h. contra h)
+	      (\m' CodeNatn'm' CodeNatn'm'. apS n' m' (decodeNatn' m' CodeNatn'm'))
+	      m)
+	n
+
+zeroNotSucc :
+    (n : Nat)
+ -> Z = S n @ Nat
+ -> Void
+ := \n. encodeNat Z (S n)
+
+succInj :
+    (n m : Nat)
+ -> S n = S m @ Nat
+ -> n = m @ Nat
+ := \n m e. decodeNat n m (encodeNat (S n) (S m) e)
 
 ------------------------------------------------------------
 
