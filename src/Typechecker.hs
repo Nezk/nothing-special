@@ -263,11 +263,10 @@ tc = \case
         tc y va
         pure $ U l
 
-    Let @m' x d b -> bind @m $ do
-        (v, vty) <- case mode @m' of
-            SInfer -> flip (,) <$> tc d         <*> asks (\c ->  eval c.ctxREnv c.ctxEnv d)
-            SCheck -> let (e, t) = d in isType t >> asks (\c ->  eval c.ctxREnv c.ctxEnv t)
-                      >>= \vty' -> tc e vty'     >> asks (\c -> (eval c.ctxREnv c.ctxEnv e, vty'))
+    Let x d b -> bind @m $ do
+        (v, vty) <- either (\ e     -> flip (,) <$> tc e         <*> asks (\c ->  eval c.ctxREnv c.ctxEnv e))
+                           (\(e, t) -> isType t  >>                  asks (\c ->  eval c.ctxREnv c.ctxEnv t)
+                                       >>= \vty' -> tc e vty'     >> asks (\c -> (eval c.ctxREnv c.ctxEnv e, vty'))) d
         pure $ scope @m (withDef x v vty) (tc b)
 
 tcS :: forall m m'. (Valid Syn m', Flow m' m, Typing m) => Spine Syn m' Rigid Check -> TcTy m

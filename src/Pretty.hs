@@ -53,8 +53,9 @@ pp' p ctx = \case
     Eql     t a b -> parens (p > 1) $ unwords [pp' 2 ctx a, "=", pp' 2 ctx b, "@", pp' 3 ctx t]
     Refl          -> "refl"    
     Use       s   -> ppS p ctx s
-    Let @m' x d b -> parens (p > 0) $ withFresh ctx x $ \x' ctx' ->
-                     let d' = case mode @m' of SInfer -> unwords [unLName x', ":=", pp' 0 ctx d]; SCheck -> unwords [unLName x', ":", pp' 0 ctx (snd d), ":=", pp' 0 ctx (fst d)]
+    Let x   d   b -> parens (p > 0) $ withFresh ctx x $ \x' ctx' ->
+                     let d' = either (\e      -> unwords [unLName x',                   ":=", pp' 0 ctx e])
+                                     (\(e, t) -> unwords [unLName x', ":", pp' 0 ctx t, ":=", pp' 0 ctx e]) d
                      in unwords ["let", d', "in", pp' 0 ctx' b]
     where ppBinder thP argP op prec x a b = parens (prec > thP) $ withFresh ctx x $ \x' ctx' -> unwords [ppDomain argP x x' a, op, ppBind @p @Infer 0 ctx' b]
           ppDomain argP x x' a            = if unLName x == "_" then pp' argP ctx a else "(" ++ unLName x' ++ " : " ++ pp' 0 ctx a ++ ")"         

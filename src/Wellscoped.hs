@@ -40,7 +40,12 @@ ws raw = case raw of
     RSigma x a b   -> Sig (LName x) <$> ws @Infer a <*> withVar x      (ws @Infer b)
     RTimes   a b   -> Sig "_"       <$> ws @Infer a <*> withVar "_"    (ws @Infer b)
     REql   t a b   -> Eql           <$> ws @Infer t <*> ws @Check a <*> ws @Check b
-    RLet   x t v b -> maybe (Let @Infer (LName x) <$> ws @Infer v) (\ty -> Let @Check (LName x) <$> (flip (,) <$> ws @Infer ty <*> ws @Check v)) t <*> withVar x (ws @m b)
+    
+    RLet   x t v b -> Let (LName x) 
+                  <$> maybe (Left         <$>          ws @Infer v) 
+                            (\ty -> Right <$> ((,) <$> ws @Check v <*> ws @Infer ty)) t 
+                  <*> withVar x (ws @m b)
+
     RVar   x       -> resolve x
 
     RApp f a -> ws @Infer f >>= \case

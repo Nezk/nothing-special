@@ -72,10 +72,6 @@ type family TApp (p :: Phase) (s :: Status) (m :: Mode) :: Mode where
     TApp Syn _     m = m
     TApp _   _     _ = None
 
-type family LetDef (m :: Mode) where
-    LetDef Infer =  Inf Syn
-    LetDef Check = (Chk Syn, Inf Syn)
-
 data Head (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
     Var  :: Valid p m => V p           -> Head p m           Rigid Check
     Hole :: HName     -> Maybe (Inf p) -> Head p (T p Check) Rigid Check
@@ -93,18 +89,18 @@ data Spine (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
     App  :: Valid p m => Spine p (TApp p s m) s arg -> Choice p s arg -> Spine p m Rigid Check
 
 data Exp (p :: Phase) (m :: Mode) where
-    U    :: Valid p m                               => Ul                              -> Exp p   m
-    Nat  :: Valid p m                               =>                                    Exp p   m
-    Zero :: Valid p m                               =>                                    Exp p   m
-    Succ :: Valid p m                               => Chk p                           -> Exp p   m
-    Pi   :: Valid p m                               => LName -> Inf p -> Bind p Infer  -> Exp p   m
-    Lam  :: LName                                   -> Bind p Check                    -> Chk p
-    Sig  :: Valid p m                               => LName -> Inf p -> Bind p Infer  -> Exp p   m
-    Pair :: Chk p                                   -> Chk p                           -> Chk p
-    Eql  :: Valid p m                               => Inf p -> Chk p -> Chk p         -> Exp p   m
-    Refl ::                                                                               Chk p
-    Use  :: Valid p m                               => Spine p m Rigid Check           -> Exp p   m
-    Let  :: (Valid Syn m', HasMode m', Valid Syn m) => LName -> LetDef m' -> Exp Syn m -> Exp Syn m
+    U    :: Valid p m   => Ul                                                        -> Exp p   m
+    Nat  :: Valid p m   =>                                                              Exp p   m
+    Zero :: Valid p m   =>                                                              Exp p   m
+    Succ :: Valid p m   => Chk p                                                     -> Exp p   m
+    Pi   :: Valid p m   => LName -> Inf p -> Bind p Infer                            -> Exp p   m
+    Lam  :: LName       -> Bind p Check                                              -> Chk p
+    Sig  :: Valid p m   => LName -> Inf p -> Bind p Infer                            -> Exp p   m
+    Pair :: Chk p       -> Chk p                                                     -> Chk p
+    Eql  :: Valid p m   => Inf p -> Chk p -> Chk p                                   -> Exp p   m
+    Refl ::                                                                             Chk p
+    Use  :: Valid p m   => Spine p m Rigid Check                                     -> Exp p   m
+    Let  :: Valid Syn m => LName -> Either (Inf Syn) (Chk Syn, Inf Syn) -> Exp Syn m -> Exp Syn m
 
 data Cl = forall m. Cl Env (Exp Syn m)
 

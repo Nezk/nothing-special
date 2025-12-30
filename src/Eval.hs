@@ -29,7 +29,7 @@ eval renv env = \case
     Pair      a b -> Pair      (eval renv env a)      (eval renv env b)
     Eql     t a b -> Eql       (eval renv env t)      (eval renv env a) (eval renv env b)
     Refl          -> Refl
-    Let @m' _ d b -> let v = case mode @m' of SInfer -> eval renv env d; SCheck -> eval renv env (fst d)
+    Let _   d   b -> let v = either (eval renv env) (eval renv env . fst) d
                      in eval renv (v : env) b
     Use       s   -> evalS renv env s
 
