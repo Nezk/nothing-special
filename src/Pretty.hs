@@ -20,11 +20,11 @@ parens b s = if b then "(" ++ s ++ ")" else s
 sub :: Int -> String
 sub = map (toEnum . (+ 0x2050) . fromEnum) . show
 
-ppVar :: forall p. PPPhase p => LNames -> V p -> String
+ppVar :: forall p. HasPhase p => LNames -> V p -> String
 ppVar ctx v = unLName $ ctx !! idx
   where idx = case phase @p of { SSem -> length ctx - unLv v - 1; SSyn -> unIx v; SNrm -> unIx v }
 
-ppBind :: forall p m. PPPhase p => Int -> LNames -> Bind p m -> String
+ppBind :: forall p m. HasPhase p => Int -> LNames -> Bind p m -> String
 ppBind p = case phase @p of { SSem -> ppCl; SSyn -> pp' p; SNrm -> pp' p }
 
 ppCl :: LNames -> Cl -> String
@@ -36,10 +36,10 @@ ppCl = \case
             dumpVal i v = "#" ++ show i ++ " = " ++ pp' 0 ctx v 
         in bodyPP ++ " { " ++ intercalate ", " (zipWith dumpVal [(0 :: Int)..] env) ++ " }"
 
-pp :: forall p m. PPPhase p => LNames -> Exp p m -> String
+pp :: forall p m. HasPhase p => LNames -> Exp p m -> String
 pp = pp' 0
 
-pp' :: forall p m. PPPhase p => Int -> LNames -> Exp p m -> String
+pp' :: forall p m. HasPhase p => Int -> LNames -> Exp p m -> String
 pp' p ctx = \case
     U         i   -> "U" ++ sub (unUl i)
     Nat           -> "ℕ"
@@ -60,7 +60,7 @@ pp' p ctx = \case
     where ppBinder thP argP op prec x a b = parens (prec > thP) $ withFresh ctx x $ \x' ctx' -> unwords [ppDomain argP x x' a, op, ppBind @p @Infer 0 ctx' b]
           ppDomain argP x x' a            = if unLName x == "_" then pp' argP ctx a else "(" ++ unLName x' ++ " : " ++ pp' 0 ctx a ++ ")"         
 
-ppS :: forall p m s arg. PPPhase p => Int -> LNames -> Spine p m s arg -> String
+ppS :: forall p m s arg. HasPhase p => Int -> LNames -> Spine p m s arg -> String
 ppS p ctx = \case
     App s arg -> 
         case s of
@@ -80,7 +80,7 @@ ppS p ctx = \case
     Head h -> ppH ctx h
 
 
-ppH :: forall p m s arg. PPPhase p => LNames -> Head p m s arg -> String
+ppH :: forall p m s arg. HasPhase p => LNames -> Head p m s arg -> String
 ppH ctx = \case
     Var i              -> ppVar @p ctx i
     Hole h t           -> "?" ++ unHName h ++ maybe "" (\t' -> "{" ++ pp' 4 ctx t' ++ "}") t

@@ -117,10 +117,10 @@ data SPhase (p :: Phase) where
     SSem :: SPhase Sem
     SNrm :: SPhase Nrm
 
-class    PPPhase (p :: Phase) where phase :: SPhase p
-instance PPPhase Syn          where phase = SSyn
-instance PPPhase Sem          where phase = SSem
-instance PPPhase Nrm          where phase = SNrm
+class    HasPhase (p :: Phase) where phase :: SPhase p
+instance HasPhase Syn          where phase = SSyn
+instance HasPhase Sem          where phase = SSem
+instance HasPhase Nrm          where phase = SNrm
 
 type Sy m = Exp Syn m
 type Vl   = Exp Sem None
