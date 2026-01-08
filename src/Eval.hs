@@ -2,8 +2,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeAbstractions #-}
 
 module Eval where
 
@@ -93,7 +91,7 @@ elimStrict renv sp arg = case sp of
     Head Contra -> 
         case arg of
             Use s -> Use (App sp s)
-            _     -> internalErr "Stuck strict elim"
+            _     -> internalErr "elimStrict: not a spine"
 
 elimFlex :: REnv -> Spine Sem None Flex Check -> Vl -> Vl
 elimFlex renv sp arg = case (sp, arg) of
@@ -103,4 +101,4 @@ elimFlex renv sp arg = case (sp, arg) of
     (_,                      Use s)  -> case unfold renv s of
          Just arg' -> elimFlex renv sp arg'
          Nothing   -> Use $ App sp s
-    _                                -> internalErr "Stuck flex elim"
+    _                                -> internalErr "elimFlex: wrong spine/arg"

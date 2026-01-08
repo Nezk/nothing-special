@@ -189,7 +189,7 @@ asSig v = force v >>= \case
 
 -- Ensures we don’t try to use a checking term in inference position
 type family Flow (i :: Mode) (o :: Mode) :: Constraint where
-    Flow Check Infer = TypeError (Text "Directionality Error: Cannot infer type for a term that requires checking mode.")
+    Flow Check Infer = TypeError (Text "Cannot infer type for a term that requires checking mode.")
     Flow _     _     = ()
 
 type family TcTy (m :: Mode) where
@@ -279,9 +279,9 @@ tcS = \case
 
 tcH :: forall m m'. (Valid Syn m', Flow m' m, Typing m) => Head Syn m' Rigid Check -> TcTy m
 tcH = \case
-    Var i     -> inst @m $ asks    \c -> c.ctxTys !! unIx i
-    Ref r     -> inst @m $ ask >>= \c -> pure $ c.ctxRTys ! r
-    Hole h t  -> case mode @m of SCheck -> reportHole h t
+    Var i    -> inst @m $ asks \c -> c.ctxTys  !! unIx i
+    Ref r    -> inst @m $ asks \c -> c.ctxRTys !  r
+    Hole h t -> case mode @m of SCheck -> reportHole h t
 
 tcFlex :: Valid Syn m => Spine Syn m Flex Check -> TC Vl
 tcFlex (Head h) = case h of
