@@ -58,9 +58,6 @@ type family Bind (p :: Phase) (m :: Mode) where
     Bind Sem _ = Cl
     Bind Nrm _ = Exp Nrm None
 
-type Inf p = Exp p (T p Infer)
-type Chk p = Exp p (T p Check)
-
 type family Valid (p :: Phase) (m :: Mode) :: Constraint where
     Valid Syn None  = TypeError (Text "Invalid Mode: None in phase: Syn")
     Valid Syn _     = ()
@@ -71,6 +68,9 @@ type family TApp (p :: Phase) (s :: Status) (m :: Mode) :: Mode where
     TApp Syn Rigid _ = Infer
     TApp Syn _     m = m
     TApp _   _     _ = None
+
+type Inf p = Exp p (T p Infer)
+type Chk p = Exp p (T p Check)
 
 data Head (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
     Var  :: Valid p m => V p           -> Head p m           Rigid Check

@@ -53,6 +53,9 @@ evalH renv env = \case
     J a x u p q y -> Head $ J     (eval renv env a) (eval renv env x) u (eval renv env p)
                                   (eval renv env q) (eval renv env y)
 
+-- The current implementation of `unfold` is highly inefficient.
+-- For every useful unfolding of a global reference,
+-- there are often 5-20 attempts to unfold spines headed by local variables.
 unfold :: REnv -> Spine Sem None Rigid Check -> Maybe Vl
 unfold renv = \case
     Head h -> case h of
@@ -68,21 +71,18 @@ app renv f a = case f of
     Use s            -> Use $ App s a
     _                -> internalErr "app: Ill-typed application"
 
+-- TODO: Merge these to functions for projections?
 doFst :: REnv -> Vl -> Vl
 doFst renv = \case
     Pair a _ -> a
-    Use  s   -> case unfold renv s of
-         Just p  -> doFst renv p
-         Nothing -> Use $ App (Head Fst) s
-    _ -> internalErr "doFst: not a pair"
+    Use  s   -> maybe (Use (App (Head Fst) s)) (doFst renv) (unfold renv s)
+    _        -> internalErr "doFst: not a pair"
 
 doSnd :: REnv -> Vl -> Vl
 doSnd renv = \case
     Pair _ b -> b
-    Use  s   -> case unfold renv s of
-         Just p  -> doSnd renv p
-         Nothing -> Use $ App (Head Snd) s
-    _ -> internalErr "doSnd: not a pair"
+    Use  s   -> maybe (Use (App (Head Snd) s)) (doSnd renv) (unfold renv s)
+    _        -> internalErr "doSnd: not a pair"
 
 elimStrict :: REnv -> Spine Sem None Strict arg -> Vl -> Vl
 elimStrict renv sp arg = case sp of
@@ -98,7 +98,5 @@ elimFlex renv sp arg = case (sp, arg) of
     (Head (Ind _ _     z _), Zero)   -> z
     (Head (Ind _ _ _     s), Succ k) -> app renv (app renv s k) (elimFlex renv sp k)
     (Head (J   _ _ _ _ q _), Refl)   -> q
-    (_,                      Use s)  -> case unfold renv s of
-         Just arg' -> elimFlex renv sp arg'
-         Nothing   -> Use $ App sp s
+    (_,                      Use s)  -> maybe (Use (App sp s)) (elimFlex renv sp) (unfold renv s)
     _                                -> internalErr "elimFlex: wrong spine/arg"
