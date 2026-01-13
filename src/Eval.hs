@@ -53,9 +53,9 @@ evalH renv env = \case
     J a x u p q y -> Head $ J     (eval renv env a) (eval renv env x) u (eval renv env p)
                                   (eval renv env q) (eval renv env y)
 
--- The current implementation of `unfold` is highly inefficient.
+-- The current implementation of unfold is highly inefficient.
 -- For every useful unfolding of a global reference,
--- there are often 5-20 attempts to unfold spines headed by local variables.
+-- a lot of attempts are made to unfold spines headed by local variables.
 unfold :: REnv -> Spine Sem None Rigid Check -> Maybe Vl
 unfold renv = \case
     Head h -> case h of
