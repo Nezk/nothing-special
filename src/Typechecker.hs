@@ -117,16 +117,16 @@ conv u v = case (u, v) of
 convS :: Spine Sem None s arg -> Spine Sem None s' arg' -> TC ()
 convS s s' = catchError match delta
   where match = case (s, s') of
-          (Head h,   Head h')   -> convH h h'
-          (App l r,  App l' r') -> convS l l' >> convArgs (view l) (view l') r r'
-          _                     -> mismatch "Shape mismatch" (P.ppS 0) s (P.ppS 0) s'
+          (Op h,              Op h')                -> convH h h'
+          (Spine h (as :> a), Spine h' (as' :> a')) -> convS (Spine h as) (Spine h' as') >> convArgs (viewA h as) (viewA h' as') a a'
+          _                                         -> mismatch "Shape mismatch" (P.ppS 0) s (P.ppS 0) s'
         convArgs :: View s a -> View s' a' -> Choice Sem s a -> Choice Sem s' a' -> TC ()
         convArgs v v' a a' = case (v, v') of
           (VRigid,  VRigid)  -> conv  a a'
           (VStrict, VStrict) -> convS a a'
           (VFlex,   VFlex)   -> convS a a'
           _                  -> mismatch "View mismatch" (P.ppS 0) s (P.ppS 0) s'
-        delta err = case (view s, view s') of -- both spines are rigid because of Use
+        delta err = case (viewS s, viewS s') of -- both spines are rigid because of Use
           (VRigid, VRigid) -> expand s  (`conv` Use s') -- Trying to unfold the left  spine, applying conv if it succeeds
                             $ expand s' (conv  (Use s)) -- Trying to unfold the right spine
                             $ throwError err
@@ -270,12 +270,12 @@ tc = \case
         pure $ scope @m (withDef x v vty) (tc b)
 
 tcS :: forall m m'. (Valid Syn m', Flow m' m, Typing m) => Spine Syn m' Rigid Check -> TcTy m
-tcS = \case
-    Head h    -> tcH @m h
-    App s arg -> case view s of
-        VRigid  -> tcApp @m (tcS @Infer) s arg
-        VFlex   -> tcApp @m tcFlex       s arg
-        VStrict -> case s of Head h -> tcAppStrict @m h arg
+tcS (Spine h args) = case args of
+    Nil     -> tcH @m h
+    as :> a -> case viewA h as of
+        VRigid  -> tcApp @m (tcS @Infer) (Spine h as) a
+        VFlex   -> tcApp @m tcFlex       (Spine h as) a
+        VStrict -> case as of Nil -> tcAppStrict @m h a 
 
 tcH :: forall m m'. (Valid Syn m', Flow m' m, Typing m) => Head Syn m' Rigid Check -> TcTy m
 tcH = \case
@@ -284,7 +284,7 @@ tcH = \case
     Hole h t -> case mode @m of SCheck -> reportHole h t
 
 tcFlex :: Valid Syn m => Spine Syn m Flex Check -> TC Vl
-tcFlex (Head h) = case h of
+tcFlex (Spine h Nil) = case h of -- Op…
     Ind u p z s -> do
         tc p $ Pi "_" Nat (Cl [] (U u :: Exp Syn Infer))
         vp   <- asks \c -> eval c.ctxREnv c.ctxEnv p
@@ -295,17 +295,17 @@ tcFlex (Head h) = case h of
         -- Domain: P n
         -- Context: [n : Nat, P : Nat -> U l, ...]
         -- Indices:  0        1
-        let dom = Use $ App (Head (Var 1)) (var 0)
+        let dom = Use $ sapp (Op (Var 1)) (var 0)
         -- Context: [hyp : P n, n : Nat, P : Nat -> U l, ...]
         -- Indices:  0          1        2
-        let cod = Use $ App (Head (Var 2)) (Succ (var 1))
+        let cod = Use $ sapp (Op (Var 2)) (Succ (var 1))
 
         let body :: Exp Syn Infer = Pi "_" dom cod
         let sTy  = Pi "_" Nat (Cl [vp] body)
 
         tc s sTy
 
-        let resTy :: Exp Syn Infer = Use $ App (Head (Var 1)) (var 0)
+        let resTy :: Exp Syn Infer = Use $ sapp (Op (Var 1)) (var 0)
         pure $ Pi "n" Nat (Cl [vp] resTy)
 
     J a x u p q y -> do
@@ -333,7 +333,7 @@ tcFlex (Head h) = case h of
         let dom = Eql va vx vy
         -- P y e
         -- Indices: 0 -> e, 1 -> vy, 2 -> vp
-        let cod :: Exp Syn Infer = Use $ App (App (Head (Var 2)) (var 1)) (var 0)
+        let cod :: Exp Syn Infer = Use $ sapp (sapp (Op (Var 2)) (var 1)) (var 0)
         pure $ Pi "_" dom (Cl [vy, vp] cod)
 
 tcApp :: forall m a. Typing m => (a -> TC Vl) -> a -> Chk Syn -> TcTy m

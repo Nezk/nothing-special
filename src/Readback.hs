@@ -26,17 +26,18 @@ rbBind :: REnv -> Lv -> Cl -> Nm
 rbBind renv lv (Cl env b) = rb renv (lv + 1) (eval renv (var lv : env) b)
 
 rbS :: REnv -> Lv -> Spine Sem None s arg -> Spine Nrm None s arg
-rbS renv lv = \case
-    Head h  -> Head (rbH renv lv h)
-    App s a -> case view s of
-            VRigid  -> App s' (rb  renv lv a)
-            VStrict -> App s' (rbS renv lv a)
-            VFlex   -> App s' (rbS renv lv a)
-            where s' = rbS renv lv s
+rbS renv lv (Spine h args) = case args of
+    Nil     -> Op $ rbH renv lv h
+    as :> a -> 
+        let s' = rbS renv lv $ Spine h as
+        in case viewA h as of
+            VRigid  -> sapp s' (rb  renv lv a)
+            VStrict -> sapp s' (rbS renv lv a)
+            VFlex   -> sapp s' (rbS renv lv a)
 
 rbH :: REnv -> Lv -> Head Sem None s arg -> Head Nrm None s arg
 rbH renv lv = \case
-    Var  l           -> Var   (lvl2ix lv l)
+    Var  l           -> Var    $ lvl2ix lv l
     Hole n t         -> Hole n $ rb renv lv <$> t
     Ref  r           -> Ref r    
     Ind  u a b c     -> Ind u (rb renv lv a) (rb renv lv b)   (rb renv lv c)

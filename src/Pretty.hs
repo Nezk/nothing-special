@@ -61,35 +61,34 @@ pp' p ctx = \case
           ppDomain argP x x' a            = if unLName x == "_" then pp' argP ctx a else "(" ++ unLName x' ++ " : " ++ pp' 0 ctx a ++ ")"         
 
 ppS :: forall p m s arg. HasPhase p => Int -> LNames -> Spine p m s arg -> String
-ppS p ctx = \case
-    App s arg -> 
-        case s of
-            Head Fst -> ppArg ++ ".1"
-            Head Snd -> ppArg ++ ".2"
-            _        -> parens (p > 3) $ unwords [ppS 3 ctx s, ppArg]
-        where ppArg = case view s of
-                         VRigid  -> pp' 4 ctx arg
+ppS p ctx (Spine h args) = case args of
+    Nil     -> ppH ctx h
+    as :> a -> 
+        case Spine h as of
+            Op Fst -> ppArg ++ ".1"
+            Op Snd -> ppArg ++ ".2"
+            s      -> parens (p > 3) $ unwords [ppS 3 ctx s, ppArg]
+        where ppArg = case viewA h as of
+                         VRigid  -> pp' 4 ctx a
                          VStrict -> case phase @p of
-                             SSyn -> ppS 4 ctx arg
-                             SSem -> ppS 4 ctx arg
-                             SNrm -> ppS 4 ctx arg
+                             SSyn -> ppS 4 ctx a
+                             SSem -> ppS 4 ctx a
+                             SNrm -> ppS 4 ctx a
                          VFlex   -> case phase @p of
-                             SSyn -> pp' 4 ctx arg
-                             SSem -> ppS 4 ctx arg
-                             SNrm -> ppS 4 ctx arg
-    Head h -> ppH ctx h
-
+                             SSyn -> pp' 4 ctx a
+                             SSem -> ppS 4 ctx a
+                             SNrm -> ppS 4 ctx a
 
 ppH :: forall p m s arg. HasPhase p => LNames -> Head p m s arg -> String
 ppH ctx = \case
-    Var i              -> ppVar @p ctx i
-    Hole h t           -> "?" ++ unHName h ++ maybe "" (\t' -> "{" ++ pp' 4 ctx t' ++ "}") t
-    Ref r              -> unRName r    
-    Contra             -> "contra"
-    Ind   (Ul k) p z s -> unwords ["ind",                           "{" ++ show k ++ "}", pp' 4 ctx p, pp' 4 ctx z, pp' 4 ctx s]
-    J a x (Ul k) p q y -> unwords ["J",   pp' 4 ctx a, pp' 4 ctx x, "{" ++ show k ++ "}", pp' 4 ctx p, pp' 4 ctx q, pp' 4 ctx y]    
-    Fst                -> "fst"
-    Snd                -> "snd"
+    Var      i                -> ppVar @p ctx i
+    Hole   h t                -> "?" ++ unHName h ++ maybe "" (\t' -> "{" ++ pp' 4 ctx t' ++ "}") t
+    Ref    r                  -> unRName r    
+    Contra                    -> "contra"
+    Ind          (Ul k) p z s -> unwords ["ind",                           "{" ++ show k ++ "}", pp' 4 ctx p, pp' 4 ctx z, pp' 4 ctx s]
+    J        a x (Ul k) p q y -> unwords ["J",   pp' 4 ctx a, pp' 4 ctx x, "{" ++ show k ++ "}", pp' 4 ctx p, pp' 4 ctx q, pp' 4 ctx y]    
+    Fst                       -> "fst"
+    Snd                       -> "snd"
 
 withFresh :: LNames -> LName -> (LName -> LNames -> res) -> res
 withFresh ctx x k = let x' = fresh x ctx in k x' (x' : ctx)

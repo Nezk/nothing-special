@@ -34,7 +34,7 @@ ws raw = case raw of
     RU     i       -> pure $ U (Ul i)
     RNat           -> pure Nat
     RZero          -> pure Zero
-    RSucc    t     -> Succ <$> ws @Check t
+    RSucc    t     -> Succ          <$> ws @Check t
     RPi    x a b   -> Pi  (LName x) <$> ws @Infer a <*> withVar x      (ws @Infer b)
     RFun     a b   -> Pi  "_"       <$> ws @Infer a <*> withVar "_"    (ws @Infer b)
     RSigma x a b   -> Sig (LName x) <$> ws @Infer a <*> withVar x      (ws @Infer b)
@@ -51,29 +51,29 @@ ws raw = case raw of
     RApp f a -> ws @Infer f >>= \case
         Use s -> do
             arg <- ws @Check a
-            pure $ Use $ App s arg
+            pure $ Use $ sapp s arg
         _     -> wsErr
         
     RFst t -> ws @Infer t >>= \case
-        Use s -> pure $ Use (App (Head Fst) s)
+        Use s -> pure $ Use (sapp (Op Fst) s)
         _     -> wsErr
 
     RSnd t -> ws @Infer t >>= \case
-        Use s -> pure $ Use (App (Head Snd) s)
+        Use s -> pure $ Use (sapp (Op Snd) s)
         _     -> wsErr
 
     RInd l p z s n -> do
         cn <- ws @Check n; cp <- ws @Check p; cz <- ws @Check z; cs <- ws @Check s
-        pure $ Use (App (Head (Ind (Ul l) cp cz cs)) cn)
+        pure $ Use (sapp (Op (Ind (Ul l) cp cz cs)) cn)
 
     RJ a x l p q y e -> do
         ca <- ws @Infer a; cx <- ws @Check x; cp <- ws @Check p
         cq <- ws @Check q; cy <- ws @Check y; ce <- ws @Check e
-        pure $ Use (App (Head (J ca cx (Ul l) cp cq cy)) ce)
+        pure $ Use (sapp (Op (J ca cx (Ul l) cp cq cy)) ce)
 
     RContra t -> case mode @m of 
         SCheck -> ws @Infer t >>= \case
-            Use s -> pure $ Use (App (Head Contra) s)
+            Use s -> pure $ Use (sapp (Op Contra) s)
             _     -> wsErr
         _      -> wsErr
 
@@ -92,13 +92,13 @@ ws raw = case raw of
     RHole n t -> case mode @m of 
         SCheck -> do
             t' <- traverse (ws @Infer) t
-            pure $ Use (Head (Hole (HName n) t'))
+            pure $ Use (Op (Hole (HName n) t'))
         _      -> wsErr
     
     where wsErr               = lift . Left $ "Cannot infer expression: " ++ ppRaw raw
           withVar    x        = local \c -> c { scLocals = x : scLocals c }
           lookupName name ctx = (Left <$> elemIndex name (scLocals ctx)) <|> (Right (RName name) <$ guard (RName name `elem` scGlobals ctx))
-          resolve    n        = asks (lookupName n) >>= \case
+          resolve    n        = asks (lookupName n) >>= \case -- TODO
               Nothing        -> lift $ Left $ "Var not in scope: " ++ n
               Just (Left i)  -> pure $ var (Ix i)
-              Just (Right r) -> pure $ Use (Head (Ref r))
+              Just (Right r) -> pure $ Use (Op (Ref r))

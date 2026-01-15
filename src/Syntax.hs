@@ -84,9 +84,14 @@ data Head (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
     Snd    :: Valid p m => Head p m           Strict Infer
     Contra ::              Head p (T p Check) Strict Infer
 
+-- TODO: write a detailed commentary on `mh`/`sh`/`argh` arguments
+infixl 5 :>
+data Args (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) (mh :: Mode) (sh :: Status) (argh :: Mode) where
+    Nil  ::                                                                                                      Args p m s     arg   m  s  arg
+    (:>) :: (Valid p m, Valid p (TApp p s' m)) => Args p (TApp p s' m) s' arg' mh sh argh -> Choice p s' arg' -> Args p m Rigid Check mh sh argh
+
 data Spine (p :: Phase) (m :: Mode) (s :: Status) (arg :: Mode) where
-    Head :: Valid p m => Head  p m            s arg                   -> Spine p m s     arg
-    App  :: Valid p m => Spine p (TApp p s m) s arg -> Choice p s arg -> Spine p m Rigid Check
+    Spine :: Valid p m => Head p mh sh argh -> Args p m s arg mh sh argh -> Spine p m s arg
 
 data Exp (p :: Phase) (m :: Mode) where
     U    :: Valid p m   => Ul                                                        -> Exp p   m
