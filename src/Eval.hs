@@ -12,7 +12,7 @@ import Utils
 
 -- It is not possible to use `Choice` here because of the `Strict` and `Flex` cases.
 -- In `Choice`, these heads accept `Rigid` spines (Neutrals) as arguments.
--- Here, evaluation returns the `Strict` or `Flex` spine itself — using `Op` pattern
+-- Here, evaluation returns the `Strict` or `Flex` spine itself
 type family Res (s :: Status) (arg :: Mode) where
     Res Rigid    _   = Vl
     Res Strict   arg = Spine Sem None Strict arg

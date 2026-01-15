@@ -61,9 +61,9 @@ pp' p ctx = \case
           ppDomain argP x x' a            = if unLName x == "_" then pp' argP ctx a else "(" ++ unLName x' ++ " : " ++ pp' 0 ctx a ++ ")"         
 
 ppS :: forall p m s arg. HasPhase p => Int -> LNames -> Spine p m s arg -> String
-ppS p ctx (Spine h args) = case args of
+ppS p ctx (Spine h args) = case args of -- (h x y a)
     Nil     -> ppH ctx h
-    as :> a -> 
+    as :> a -> -- (h x y | a)
         case Spine h as of
             Op Fst -> ppArg ++ ".1"
             Op Snd -> ppArg ++ ".2"
